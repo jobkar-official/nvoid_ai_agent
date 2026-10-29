@@ -31,6 +31,7 @@ describe('search-engine job crawler', () => {
   it('recognizes public job URLs and rejects unsafe URLs', () => {
     expect(crawler.isJobUrl('https://jobs.lever.co/acme/123')).toBe(true);
     expect(crawler.isJobUrl('https://www.naukri.com/job-listings-java-developer-123')).toBe(true);
+    expect(crawler.isJobUrl('https://www.indeed.com/viewjob?jk=abc123')).toBe(true);
     expect(crawler.isJobUrl('https://example.com/about')).toBe(false);
     expect(crawler.safeUrl('http://127.0.0.1/admin')).toBeUndefined();
     expect(crawler.safeUrl('file:///etc/passwd')).toBeUndefined();
