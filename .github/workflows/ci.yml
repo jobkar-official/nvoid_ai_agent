@@ -32,6 +32,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: node --check scripts/remoteok-mcp-server.cjs
       - run: npm run lint:types
       - run: npm test -- --coverage
       - run: npm run build
