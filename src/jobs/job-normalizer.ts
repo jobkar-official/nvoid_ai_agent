@@ -9,7 +9,7 @@ const LOCATION_KEYS = ['location', 'jobLocation', 'job_location', 'jobGeo', 'job
 const DESCRIPTION_KEYS = ['description', 'jobDescription', 'job_description', 'summary', 'details', 'snippet'];
 const SALARY_MIN_KEYS = ['salaryMin', 'salary_min', 'minSalary', 'min_salary', 'salary_from', 'minimumSalary'];
 const SALARY_MAX_KEYS = ['salaryMax', 'salary_max', 'maxSalary', 'max_salary', 'salary_to', 'maximumSalary'];
-const POSTED_KEYS = ['postedAt', 'posted_at', 'datePosted', 'date_posted', 'createdAt', 'created_at', 'publishedAt', 'pubDate', 'pub_date'];
+const POSTED_KEYS = ['postedAt', 'posted_at', 'datePosted', 'date_posted', 'createdAt', 'created_at', 'publishedAt', 'pubDate', 'pub_date', 'date', 'epoch'];
 
 export function parseMcpJobResult(result: unknown): unknown[] {
   if (!result || typeof result !== 'object') return [];
@@ -86,7 +86,7 @@ export function normalizeJob(rawValue: unknown, source: string, profile: JobProf
     jobUrl,
     applicationUrl,
     employmentType: getString(raw, ['employmentType', 'employment_type', 'jobType', 'job_type', 'type']),
-    workMode: getString(raw, ['workMode', 'work_mode', 'workplaceType', 'workplace_type', 'remoteType']) ?? (source === 'jobicy' ? 'Remote' : undefined),
+    workMode: getString(raw, ['workMode', 'work_mode', 'workplaceType', 'workplace_type', 'remoteType']) ?? (['jobicy', 'remoteok'].includes(source) ? 'Remote' : undefined),
     salaryMin: getNumber(raw, SALARY_MIN_KEYS),
     salaryMax: getNumber(raw, SALARY_MAX_KEYS),
     salaryCurrency: getString(raw, ['salaryCurrency', 'salary_currency', 'currency']),
