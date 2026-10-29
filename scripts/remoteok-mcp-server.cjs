@@ -69,10 +69,10 @@ function matchesLocation(job, requested) {
 
   const description = text(job.description);
   if (isGlobalLocation(description)) return true;
-  const restriction = description.match(/(?:based in|based out of|located in|must be (?:located|based|resident) in|residing in|residing within|candidates? (?:must|should) be (?:located|based) in|only available in|available only in|position is restricted to)\\s+([^.<\\n]{2,70})/i);
+  const restriction = description.match(/(?:based in|based out of|located in|must be (?:located|based|resident) in|residing in|residing within|candidates? (?:must|should) be (?:located|based) in|only available in|available only in|position is restricted to)\s+([^.<\n]{2,70})/i);
   const restrictedRegion = restriction ? regionFor(restriction[1]) : undefined;
   if (requestedRegion && restrictedRegion) return requestedRegion === restrictedRegion;
-  if (requestedRegion && /\\b(latin america|latam|south america|central america|north america|europe|apac|asia|united states|usa|canada|india|australia|united kingdom|uk)\\b/i.test(description)) {
+  if (requestedRegion && /\b(latin america|latam|south america|central america|north america|europe|apac|asia|united states|usa|canada|india|australia|united kingdom|uk)\b/i.test(description)) {
     const mentionedRegion = regionFor(description);
     if (mentionedRegion && mentionedRegion !== requestedRegion) return false;
   }
