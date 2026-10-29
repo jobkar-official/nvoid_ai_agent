@@ -1,4 +1,3 @@
-import type { JobProfile } from '../common/job.types';
 import { resolveJobicyGeo } from './job-discovery.service';
 
 describe('resolveJobicyGeo', () => {
