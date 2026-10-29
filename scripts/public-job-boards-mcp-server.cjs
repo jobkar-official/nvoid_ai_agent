@@ -242,9 +242,99 @@ function countriesFor(value) {
 function isExplicitGlobalEligibility(value) {
   return /\b(available worldwide|worldwide eligible|work from anywhere|remote from anywhere|remote worldwide|anywhere in the world|open to candidates worldwide|eligible in all countries|remote from any location)\b/i.test(String(value || ''));
 }
+function decodeXml(value) {
+  return String(value || '')
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&#x([0-9a-f]+);/gi, (_match, code) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replace(/&#(\d+);/g, (_match, code) => String.fromCodePoint(Number.parseInt(code, 10)))
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'");
+}
+
+function stripMarkup(value) {
+  return decodeXml(String(value || '')
+    .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' '))
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function xmlTag(value, tag) {
+  const pattern = new RegExp('<' + tag + '(?:\\s[^>]*)?>([\\s\\S]*?)<\\/' + tag + '>', 'i');
+  const match = String(value || '').match(pattern);
+  return match ? decodeXml(match[1]).trim() : '';
+}
+
+function parseWeWorkRemotelyRss(xml) {
+  const jobs = [];
+  const expression = /<item\b[^>]*>([\s\S]*?)<\/item>/gi;
+  let match;
+  while ((match = expression.exec(String(xml || ''))) !== null) {
+    const item = match[1];
+    const rawTitle = stripMarkup(xmlTag(item, 'title'));
+    const url = stripMarkup(xmlTag(item, 'link'));
+    const description = stripMarkup(xmlTag(item, 'description'));
+    const postedAt = stripMarkup(xmlTag(item, 'pubDate'));
+    const categories = [...item.matchAll(/<category(?:\s[^>]*)?>([\s\S]*?)<\/category>/gi)]
+      .map((category) => stripMarkup(category[1]))
+      .filter(Boolean);
+    const separator = rawTitle.indexOf(':');
+    const company = separator > 0 && separator < 90 ? rawTitle.slice(0, separator).trim() : '';
+    const title = company ? rawTitle.slice(separator + 1).trim() : rawTitle;
+    if (!title || !/^https?:\/\//i.test(url)) continue;
+    jobs.push({
+      id: url,
+      title,
+      company,
+      location: isExplicitGlobalEligibility(description) ? 'Worldwide' : '',
+      description,
+      tags: categories,
+      workMode: 'Remote',
+      postedAt,
+      url,
+      source: 'weworkremotely',
+    });
+  }
+  return jobs;
+}
+
+function countryCodeFor(value) {
+  const s = normalize(value);
+  const checks = [
+    ['IN', /\b(india|bengaluru|bangalore|delhi|mumbai|hyderabad|chennai|pune|kolkata|noida|gurugram|gurgaon)\b/],
+    ['US', /\b(united states|usa|new york|san francisco|california|texas|seattle|austin|chicago|boston|los angeles)\b/],
+    ['GB', /\b(united kingdom|uk|england|scotland|wales|london|manchester|birmingham)\b/],
+    ['CA', /\b(canada|toronto|vancouver|montreal|calgary|ottawa|edmonton)\b/],
+    ['AU', /\b(australia|sydney|melbourne|perth|brisbane|adelaide)\b/],
+    ['DE', /\b(germany|berlin|munich|frankfurt|hamburg)\b/],
+    ['FR', /\b(france|paris|lyon)\b/],
+    ['SG', /\bsingapore\b/],
+    ['AE', /\b(united arab emirates|uae|dubai|abu dhabi)\b/],
+    ['NZ', /\b(new zealand|auckland|wellington)\b/],
+    ['PK', /\b(pakistan|karachi|lahore|islamabad)\b/],
+    ['BD', /\b(bangladesh|dhaka)\b/],
+    ['NG', /\b(nigeria|lagos|abuja)\b/],
+    ['ZA', /\b(south africa|johannesburg|cape town)\b/],
+    ['IE', /\b(ireland|dublin|cork)\b/],
+  ];
+  return checks.find(([, pattern]) => pattern.test(s))?.[0];
+}
+
+function configuredBoards(environmentKey) {
+  return [...new Set(String(process.env[environmentKey] || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/.test(value)))].slice(0, 40);
+}
+
 function displayLocation(job, remoteFallback = false) {
   const primary = text(job.location || job.city || job.job_location);
   const restriction = text(job.locationRestrictions || job.location_restrictions || job.allowedCountries || job.allowed_countries || job.eligibleLocations || job.eligible_locations || job.location_country || job.country);
+  if (SOURCE === 'himalayas' && Array.isArray(job.locationRestrictions) && job.locationRestrictions.length === 0) return 'Worldwide';
   if (primary && !/^(remote|remote only|remote eligible|remote · eligibility not stated)$/i.test(primary)) return primary;
   if (restriction) return primary ? primary + ' · ' + restriction : restriction;
   if (isExplicitGlobalEligibility(job.description || job.excerpt || job.summary)) return 'Worldwide';
@@ -269,6 +359,7 @@ function matchesLocation(job, requested, remoteOnly = false) {
   const target = String(requested || '').trim();
   if (!target) return false;
   if (/^(remote|worldwide|global|anywhere|all locations|all countries)$/i.test(target)) return true;
+  if (SOURCE === 'himalayas' && Array.isArray(job.locationRestrictions) && job.locationRestrictions.length === 0) return true;
 
   const structured = locationEvidence(job);
   if (isGlobal(structured)) return true;
