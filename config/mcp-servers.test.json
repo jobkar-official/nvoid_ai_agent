@@ -1,0 +1,26 @@
+[
+  {
+    "id": "demo",
+    "name": "Nvoid Local Demo Jobs (synthetic data)",
+    "enabled": true,
+    "transport": "stdio",
+    "command": "node",
+    "args": [
+      "./scripts/demo-mcp-server.cjs"
+    ],
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        }
+      }
+    }
+  }
+]
