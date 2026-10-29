@@ -40,6 +40,27 @@ describe('job-normalizer', () => {
     expect(job?.matchScore).toBeLessThanOrEqual(100);
   });
 
+  it('normalizes live Jobicy listing metadata without fabricating missing fields', () => {
+    const job = normalizeJob({
+      id: 90210,
+      jobTitle: 'Senior Software Engineer',
+      companyName: 'Live Example Corp',
+      jobGeo: 'Asia / Remote',
+      jobType: ['Full-time'],
+      jobLevel: 'Senior',
+      jobDescription: 'A live remote engineering role.',
+      url: 'https://jobicy.com/jobs/90210-senior-software-engineer',
+      pubDate: '2026-10-29T10:00:00Z'
+    }, 'jobicy', profile);
+
+    expect(job?.title).toBe('Senior Software Engineer');
+    expect(job?.company).toBe('Live Example Corp');
+    expect(job?.location).toBe('Asia / Remote');
+    expect(job?.workMode).toBe('Remote');
+    expect(job?.postedAt).toBe('2026-10-29T10:00:00Z');
+    expect(job?.jobUrl).toBe('https://jobicy.com/jobs/90210-senior-software-engineer');
+  });
+
   it('rejects records without a job title', () => {
     expect(normalizeJob({ company: 'Example' }, 'example-mcp', profile)).toBeUndefined();
   });
