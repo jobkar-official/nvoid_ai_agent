@@ -2,6 +2,7 @@ const remoteOkFilters = require('../../scripts/remoteok-mcp-server.cjs') as {
   matchesLocation: (job: Record<string, unknown>, requested: string) => boolean;
   matchesQuery: (job: Record<string, unknown>, query: string) => boolean;
   regionFor: (value: string) => string | undefined;
+  displayLocation: (job: Record<string, unknown>) => string;
 };
 
 describe('Remote OK live source filters', () => {
