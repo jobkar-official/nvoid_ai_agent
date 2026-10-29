@@ -373,7 +373,15 @@ export class ApplicationExecutorService implements OnModuleDestroy {
       const type = metadata.type.toLowerCase();
       const descriptor = `${metadata.name} ${metadata.id} ${metadata.placeholder} ${metadata.ariaLabel} ${metadata.autocomplete} ${metadata.label}`.toLowerCase();
 
-      if (type === 'password' || type === 'checkbox' || type === 'radio' || type === 'hidden' || type === 'submit' || type === 'button') continue;
+      if (type === 'password' || type === 'hidden' || type === 'submit' || type === 'button') continue;
+
+      if (type === 'checkbox' || type === 'radio') {
+        const checked = await field.isChecked().catch(() => false);
+        if (metadata.required && !checked) {
+          requiredUnfilled.push(metadata.label || metadata.name || metadata.id || `required ${type} field-${index + 1}`);
+        }
+        continue;
+      }
 
       if (type === 'file') {
         if (resumePath && /resume|cv|curriculum|upload|file|document/i.test(descriptor)) {
