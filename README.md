@@ -55,6 +55,57 @@ npm run build
 npm test
 ```
 
+## Run and test locally before connecting real job portals
+
+The default `config/mcp-servers.json` enables a local MCP source named `demo`. It returns **synthetic test listings only** so you can verify the API, MCP connection, normalization, matching, queueing and manual-review behavior without portal credentials. Its application URLs use `example.com`; they are not real job listings. Naukri and LinkedIn entries remain disabled placeholders until you supply working, authorized MCP endpoints and their actual tool names.
+
+### Docker quick start
+
+```bash
+cp .env.example .env
+```
+
+Set a private `AGENT_API_KEY` in `.env`; do not use the example value for a deployed service. Then run:
+
+```bash
+docker compose up --build -d
+curl http://127.0.0.1:3100/api/health
+npm ci
+npm run smoke:test
+```
+
+The smoke test checks health and calls `POST /api/jobs/search` against the local demo source. It reads `AGENT_API_KEY` from `.env` and prints sample job titles with match scores. Set `NVOID_AGENT_URL` if the worker is running somewhere other than `http://127.0.0.1:3100`.
+
+To exercise the queue and browser worker as well:
+
+```bash
+npm run smoke:test -- --workflow
+```
+
+This mode queues up to two synthetic jobs, with `autoSubmit: false`, then prints recent task states. The browser opens only the example.com demo URLs, which have no application form; a manual-review result is expected. It does not submit a real application. Use this test before configuring a live source.
+
+### Run the API on your machine instead of Docker
+
+Use Node.js 22+, a local Redis 7 instance, and Chromium for Playwright:
+
+```bash
+cp .env.example .env
+npm ci
+npx playwright install chromium
+docker compose up -d redis
+npm run start:dev
+```
+
+In another terminal, run `npm run smoke:test`. The `AGENT_API_KEY` value in `.env` must match the header used by the smoke test. The API health endpoint does not require the key; protected routes do.
+
+### Run the automated checks
+
+```bash
+npm run lint:types
+npm test -- --coverage
+npm run build
+```
+
 ## Configure MCP servers
 
 Edit `config/mcp-servers.json`. Supported transports:
