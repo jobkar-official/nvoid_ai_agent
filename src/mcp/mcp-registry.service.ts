@@ -1,7 +1,5 @@
-import { Client } from '@modelcontextprotocol/client';
-import { SSEClientTransport } from '@modelcontextprotocol/client/sse';
+import { Client, SSEClientTransport, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client/streamableHttp';
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { McpServerConfig, McpServerStatus } from '../config/mcp-config.types';
