@@ -162,7 +162,10 @@ function matchesLocation(job, requested) {
   if (!location) return false;
   if (/^(remote|worldwide|global|anywhere|all locations|all countries)$/i.test(location)) return true;
 
-  const structuredLocation = [job.location, job.location_country, job.region, job.locationRestrictions].map(text).join(' ').trim();
+  const structuredLocation = [
+    job.location, job.location_country, job.region, job.locationRestrictions, job.location_restrictions,
+    job.allowedCountries, job.allowed_countries, job.countries, job.eligibleLocations, job.eligible_locations
+  ].map(text).join(' ').trim();
   if (isGlobalLocation(structuredLocation)) return true;
 
   const requestedNormalized = normalizeLocation(location);
@@ -247,8 +250,10 @@ async function searchJobs(args) {
     id: text(job.id || job.slug),
     title: text(job.position || job.title),
     company: text(job.company || job.company_name),
-    location: text(job.location || job.location_country || 'Remote · eligibility not stated'),
-    country: text(job.location_country),
+    location: text(job.location || job.location_country || job.location_restrictions || job.locationRestrictions || job.allowedCountries || job.allowed_countries || 'Remote · eligibility not stated'),
+    country: text(job.location_country || job.country),
+    locationRestrictions: text(job.locationRestrictions || job.location_restrictions),
+    allowedCountries: text(job.allowedCountries || job.allowed_countries),
     description: text(job.description),
     tags: Array.isArray(job.tags) ? job.tags : [],
     employmentType: text(job.job_type || job.employment_type),
