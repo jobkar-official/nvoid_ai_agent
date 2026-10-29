@@ -13,8 +13,29 @@ export interface SearchResult {
   returnedCount: number;
   sourceCount: number;
   jobs: NormalizedJob[];
-  sources: Array<{ serverId: string; tool: string; found: number; error?: string }>;
+  sources: Array<{ serverId: string; tool: string; found: number; error?: string; report?: SearchSourceReport }>;
+  searchReport: SearchSourceReport[];
   backendSync: { synced: boolean; reason?: string };
+}
+
+export interface SearchSourceReport {
+  serverId: string;
+  provider?: string;
+  mode?: string;
+  queryCount?: number;
+  requestsMade?: number;
+  rawIndexedResults?: number;
+  uniqueRoleLocationUrls?: number;
+  publicJobPagesFetched?: number;
+  structuredJobPages?: number;
+  metadataOnlyListings?: number;
+  matchedJobs?: number;
+  returnedJobs?: number;
+  targetCount?: number;
+  reachedRequestedLimit?: boolean;
+  moreSearchResultsAvailable?: boolean;
+  failedSearchRequests?: number;
+  truncated?: boolean;
 }
 
 @Injectable()
@@ -37,15 +58,16 @@ export class JobDiscoveryService {
 
     const maximum = this.configService.get<number>('maxSearchResults', 200);
     const requestedLimit = Math.min(Math.max(1, limit), maximum);
+    const effectiveProfile: JobProfile = { ...profile, location: profile.location?.trim() || (profile.countries ?? []).filter((country) => country.trim()).join(', ') || 'Worldwide' };
     const servers = this.mcpRegistry.getJobSearchServers().filter((item) => !serverIds?.length || serverIds.includes(item.server.id));
     if (servers.length === 0) {
       throw new ServiceUnavailableException('No connected MCP server has a configured or discoverable job-search tool. Configure jobSearch.tool for each MCP server in config/mcp-servers.json.');
     }
 
-    const sourceResults = await Promise.all(servers.map(async (entry) => {
+    const sourceResults: Array<{ serverId: string; tool: string; jobs: NormalizedJob[]; error?: string; report?: SearchSourceReport }> = await Promise.all(servers.map(async (entry) => {
       try {
         const args = entry.configured
-          ? resolveTemplate(entry.argumentsTemplate, { profile, limit: requestedLimit })
+          ? resolveTemplate(entry.argumentsTemplate, { profile: effectiveProfile, limit: requestedLimit })
           : inferArguments(entry.inputSchema, profile, requestedLimit);
         if (!entry.configured && args === undefined) {
           return { serverId: entry.server.id, tool: entry.tool, jobs: [] as NormalizedJob[], error: 'Could not safely infer the required arguments. Define jobSearch.tool and jobSearch.arguments in mcp-servers.json.' };
@@ -54,16 +76,16 @@ export class JobDiscoveryService {
         const toolArgs = entry.server.id === 'jobicy'
           ? {
               ...(args ?? {}),
-              tag: profile.jobTitle,
-              geo: resolveJobicyGeo(profile),
+              tag: effectiveProfile.jobTitle,
+              geo: resolveJobicyGeo(effectiveProfile),
               count: 200,
             }
           : args ?? {};
         const sourceArgs = entry.server.id === 'remoteok'
           ? {
               ...(args ?? {}),
-              query: profile.jobTitle,
-              location: profile.location ?? profile.countries?.join(', ') ?? 'Worldwide',
+              query: effectiveProfile.jobTitle,
+              location: effectiveProfile.location,
               limit: Math.min(100, requestedLimit),
             }
           : toolArgs;
@@ -85,14 +107,14 @@ export class JobDiscoveryService {
               const applicationUrl = resolveRemoteOkApplicationUrl(job.jobUrl, directUrl);
               return { ...job, applicationUrl };
             }
-            if (['jobicy', 'arbeitnow', 'workingnomads', 'himalayas', 'adzuna', 'jooble'].includes(entry.server.id)) {
+            if (['jobicy', 'arbeitnow', 'workingnomads', 'himalayas', 'adzuna', 'jooble', 'remotive', 'weworkremotely', 'greenhouse', 'lever', 'ashby', 'brave-search'].includes(entry.server.id)) {
               return { ...job, applicationUrl: undefined };
             }
             return job;
           })
           .filter((job) => matchesJobTitle(job.title, job.raw, profile.jobTitle, profile.experienceYears))
           .filter((job) => matchesJobLocation(job, profile));
-        return { serverId: entry.server.id, tool: entry.tool, jobs };
+        return { serverId: entry.server.id, tool: entry.tool, jobs, report: parseSearchReport(result, entry.server.id) };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         this.logger.warn(`Job discovery from ${entry.server.id}/${entry.tool} failed: ${message}`);
@@ -114,8 +136,10 @@ export class JobDiscoveryService {
       const match = calculateMatchScore(raw, job.title, job.location, profile);
       return { ...job, matchScore: Math.max(job.matchScore, match.score), matchReasons: [...new Set([...job.matchReasons, ...match.reasons])] };
     });
-    const AIranked = await this.aiAgent.rerankJobs(profile, candidates);
-    const jobs = AIranked.sort((a, b) => b.matchScore - a.matchScore).slice(0, requestedLimit);
+    const initiallyRanked = candidates.sort((a, b) => b.matchScore - a.matchScore);
+    const aiCandidates = initiallyRanked.slice(0, Math.min(100, initiallyRanked.length));
+    const AIranked = await this.aiAgent.rerankJobs(profile, aiCandidates);
+    const jobs = [...AIranked, ...initiallyRanked.slice(aiCandidates.length)].sort((a, b) => b.matchScore - a.matchScore).slice(0, requestedLimit);
 
     let backendSync: { synced: boolean; reason?: string } = { synced: false, reason: 'Backend sync disabled for this search.' };
     if (syncToBackend) backendSync = await this.backendSync.syncJobs(profile.userId, profile, jobs);
@@ -125,7 +149,8 @@ export class JobDiscoveryService {
       returnedCount: jobs.length,
       sourceCount: sourceResults.length,
       jobs,
-      sources: sourceResults.map((entry) => ({ serverId: entry.serverId, tool: entry.tool, found: entry.jobs.length, error: entry.error })),
+      sources: sourceResults.map((entry) => ({ serverId: entry.serverId, tool: entry.tool, found: entry.jobs.length, error: entry.error, report: entry.report })),
+      searchReport: sourceResults.flatMap((entry) => entry.report ? [entry.report] : []),
       backendSync,
     };
   }
@@ -148,6 +173,20 @@ export class JobDiscoveryService {
     this.jobicyCache.set(cacheKey, { expiresAt: now + 60 * 60 * 1000, result });
     return result;
   }
+}
+
+function parseSearchReport(result: unknown, serverId: string): SearchSourceReport | undefined {
+  if (!result || typeof result !== 'object') return undefined;
+  const root = result as Record<string, unknown>;
+  let structured = root.structuredContent;
+  if (!structured && Array.isArray(root.content)) {
+    const item = root.content.find((entry) => entry && typeof entry === 'object' && 'text' in entry) as Record<string, unknown> | undefined;
+    if (typeof item?.text === 'string') { try { structured = JSON.parse(item.text) as unknown; } catch { return undefined; } }
+  }
+  if (!structured || typeof structured !== 'object') return undefined;
+  const metadata = (structured as Record<string, unknown>).searchMetadata;
+  if (!metadata || typeof metadata !== 'object') return undefined;
+  return { serverId, ...(metadata as Omit<SearchSourceReport, 'serverId'>) };
 }
 
 function resolveSourceId(serverId: string, raw: unknown): string {
