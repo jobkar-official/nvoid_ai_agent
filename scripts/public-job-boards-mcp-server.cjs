@@ -658,21 +658,62 @@ async function fetchAllJobs(query, location) {
       const payload = await fetchJson('https://www.workingnomads.com/api/exposed_jobs/');
       if (!Array.isArray(payload)) throw new Error('Working Nomads returned an unexpected response.');
       rawJobs.push(...payload);
-    } else {
-      let cursor = '';
-      const seenCursors = new Set();
-      for (let page = 0; page < SOURCE_CONFIG[SOURCE].maxPages; page++) {
-        const params = new URLSearchParams({ limit: '100' });
-        if (cursor) params.set('cursor', cursor);
-        const payload = await fetchJson('https://himalayas.app/jobs/api?' + params.toString());
-        const jobs = payload.jobs;
-        if (!Array.isArray(jobs) || jobs.length === 0) break;
-        rawJobs.push(...jobs);
-        const nextCursor = text(payload.nextCursor);
-        if (!nextCursor || seenCursors.has(nextCursor)) break;
-        seenCursors.add(nextCursor);
-        cursor = nextCursor;
+    } else if (SOURCE === 'remotive') {
+      const payload = await fetchJson('https://remotive.com/api/remote-jobs');
+      if (!Array.isArray(payload.jobs)) throw new Error('Remotive returned an unexpected response.');
+      rawJobs.push(...payload.jobs);
+    } else if (SOURCE === 'weworkremotely') {
+      rawJobs.push(...parseWeWorkRemotelyRss(await fetchText('https://weworkremotely.com/remote-jobs.rss')));
+    } else if (SOURCE === 'himalayas') {
+      for (let page = 1; page <= SOURCE_CONFIG[SOURCE].maxPages; page++) {
+        const params = new URLSearchParams({ q: query, sort: 'recent', page: String(page) });
+        const countryCode = countryCodeFor(location);
+        if (countryCode) params.set('country', countryCode);
+        const payload = await fetchJson('https://himalayas.app/jobs/api/search?' + params.toString());
+        if (!Array.isArray(payload.jobs) || payload.jobs.length === 0) break;
+        rawJobs.push(...payload.jobs);
+        const totalCount = Number(payload.totalCount);
+        if (Number.isFinite(totalCount) && page * payload.jobs.length >= totalCount) break;
       }
+    } else if (['greenhouse', 'lever', 'ashby'].includes(SOURCE)) {
+      const environmentKey = ({ greenhouse: 'GREENHOUSE_BOARDS', lever: 'LEVER_SITES', ashby: 'ASHBY_BOARDS' })[SOURCE];
+      const boards = configuredBoards(environmentKey);
+      if (boards.length === 0) throw new Error('Configure ' + environmentKey + ' as a comma-separated list of company board slugs in the worker .env.');
+      const failures = [];
+      for (let startIndex = 0; startIndex < boards.length; startIndex += 4) {
+        const batch = boards.slice(startIndex, startIndex + 4);
+        const results = await Promise.all(batch.map(async (board) => {
+          try {
+            let items;
+            if (SOURCE === 'greenhouse') {
+              const payload = await fetchJson('https://boards-api.greenhouse.io/v1/boards/' + encodeURIComponent(board) + '/jobs?content=true');
+              if (!Array.isArray(payload.jobs)) throw new Error('Greenhouse returned an unexpected response for board ' + board);
+              items = payload.jobs;
+            } else if (SOURCE === 'lever') {
+              const payload = await fetchJson('https://api.lever.co/v0/postings/' + encodeURIComponent(board) + '?mode=json');
+              if (!Array.isArray(payload)) throw new Error('Lever returned an unexpected response for board ' + board);
+              items = payload;
+            } else {
+              const payload = await fetchJson('https://api.ashbyhq.com/posting-api/job-board/' + encodeURIComponent(board) + '?includeCompensation=true&listedOnly=true');
+              if (!Array.isArray(payload.jobs)) throw new Error('Ashby returned an unexpected response for board ' + board);
+              items = payload.jobs.filter((job) => job.isListed !== false);
+            }
+            return { board, items: items.map((job) => ({ ...job, _boardToken: board })) };
+          } catch (error) {
+            return { board, items: [], error: error instanceof Error ? error.message : String(error) };
+          }
+        }));
+        for (const result of results) {
+          if (result.error) failures.push(result.board + ': ' + result.error);
+          rawJobs.push(...result.items);
+        }
+      }
+      if (rawJobs.length === 0 && failures.length > 0) {
+        throw new Error('All ' + SOURCE + ' career boards failed: ' + failures.slice(0, 4).join('; '));
+      }
+      if (failures.length > 0) process.stderr.write(SOURCE + ' skipped ' + failures.length + ' unavailable board(s).\\n');
+    } else {
+      throw new Error('No fetch implementation exists for source ' + SOURCE + '.');
     }
 
     const deduped = new Map();
