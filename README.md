@@ -6,7 +6,12 @@ This is a separate worker service. Keep your existing Next.js frontend and Sprin
 
 ## Live source coverage and integration boundaries
 
-The default `config/mcp-servers.json` enables the public Jobicy MCP endpoint for live remote-job discovery. Each search sends the candidate's target role and a supported geographic region, normalizes current results, and preserves the canonical Jobicy listing URL. Results from this public feed are remote listings and are cached per query for one hour in line with the provider's usage guidance. The public feed does not provide a verified employer application URL, so Jobicy records are searchable but are deliberately excluded from the application queue.
+The default `config/mcp-servers.json` enables two public sources for live remote-job discovery:
+
+- **Jobicy MCP**: sends the candidate's role and a supported geographic region, caches each role/region query for one hour, and preserves the canonical Jobicy listing URL.
+- **Remote OK public feed**: fetches the public JSON feed, caches it for one hour, then locally filters records using the candidate's role and geographic preference while preserving the original Remote OK URL.
+
+Both feeds are remote-job sources, not complete coverage of onsite jobs or every job portal. The canonical provider listing is always retained. Jobicy listings are deliberately excluded from the application queue because its public feed doesn't provide a verified employer application URL. Remote OK listings are queue-eligible only when the feed explicitly provides a separate direct `apply_url`; listing-only entries are not queued.
 
 The local synthetic demo MCP source is disabled in the default runtime configuration and isolated in `config/mcp-servers.test.json` for CI. The Naukri and LinkedIn entries are disabled placeholders, not live integrations. They will not return portal jobs until a real, authorized MCP endpoint and its actual tool/argument schema are configured. MCP servers connected in ChatGPT or another desktop host are not automatically available to this NestJS worker.
 
