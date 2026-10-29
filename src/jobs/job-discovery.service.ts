@@ -44,11 +44,20 @@ export class JobDiscoveryService {
           return { serverId: entry.server.id, tool: entry.tool, jobs: [] as NormalizedJob[], error: 'Could not safely infer the required arguments. Define jobSearch.tool and jobSearch.arguments in mcp-servers.json.' };
         }
 
-        const result = await this.mcpRegistry.callTool(entry.server.id, entry.tool, args ?? {});
+        const toolArgs = entry.server.id === 'jobicy'
+          ? {
+              ...(args ?? {}),
+              tag: profile.jobTitle,
+              geo: resolveJobicyGeo(profile),
+              count: Math.min(200, requestedLimit),
+            }
+          : args ?? {};
+        const result = await this.mcpRegistry.callTool(entry.server.id, entry.tool, toolArgs);
         const rawJobs = parseMcpJobResult(result);
         const jobs = rawJobs
           .map((raw) => normalizeJob(raw, entry.server.id, profile))
-          .filter((job): job is NormalizedJob => Boolean(job));
+          .filter((job): job is NormalizedJob => Boolean(job))
+          .map((job) => entry.server.id === 'jobicy' ? { ...job, applicationUrl: undefined } : job);
         return { serverId: entry.server.id, tool: entry.tool, jobs };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -116,4 +125,20 @@ function inferArguments(schemaValue: unknown, profile: JobProfile, limit: number
   }
 
   return missing.length > 0 ? undefined : result;
+}
+
+function resolveJobicyGeo(profile: JobProfile): string {
+  const location = (profile.location ?? '').trim().toLowerCase();
+  if (!location || /^(remote|worldwide|global|anywhere|all locations|all countries)$/.test(location)) return 'anywhere';
+  const region = regionForJobicyLocation(location);
+  if (region) return region;
+  const preferredRegions = [...new Set((profile.countries ?? []).map((country) => regionForJobicyLocation(country.toLowerCase())).filter((value): value is string => Boolean(value)))];
+  return preferredRegions.length === 1 ? preferredRegions[0] : 'anywhere';
+}
+
+function regionForJobicyLocation(value: string): string | undefined {
+  if (/\b(india|bengaluru|bangalore|delhi|mumbai|hyderabad|chennai|pune|kolkata|asia|apac|singapore|australia|japan|new zealand|philippines|pakistan|nepal|sri lanka|indonesia|thailand|vietnam|hong kong|malaysia)\b/.test(value)) return 'apac';
+  if (/\b(europe|united kingdom|uk|london|germany|berlin|france|paris|netherlands|amsterdam|ireland|dublin|spain|italy|poland|sweden|norway|finland|portugal|switzerland|austria|belgium|denmark)\b/.test(value)) return 'europe';
+  if (/\b(usa|united states|america|new york|san francisco|california|texas|seattle|austin|chicago|boston|los angeles)\b/.test(value)) return 'usa';
+  return undefined;
 }
