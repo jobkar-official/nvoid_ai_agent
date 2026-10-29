@@ -61,6 +61,25 @@ describe('job-normalizer', () => {
     expect(job?.jobUrl).toBe('https://jobicy.com/jobs/90210-senior-software-engineer');
   });
 
+  it('normalizes Remote OK listing and explicit direct-apply URLs', () => {
+    const job = normalizeJob({
+      id: 'remoteok-1',
+      position: 'TypeScript Engineer',
+      company: 'Live Example',
+      location: 'Worldwide',
+      description: 'Build APIs in TypeScript.',
+      tags: ['typescript', 'backend'],
+      date: '2026-10-29T10:00:00Z',
+      url: 'https://remoteok.com/remote-jobs/remoteok-1',
+      apply_url: 'https://careers.example.org/jobs/remoteok-1'
+    }, 'remoteok', profile);
+
+    expect(job?.title).toBe('TypeScript Engineer');
+    expect(job?.jobUrl).toBe('https://remoteok.com/remote-jobs/remoteok-1');
+    expect(job?.applicationUrl).toBe('https://careers.example.org/jobs/remoteok-1');
+    expect(job?.postedAt).toBe('2026-10-29T10:00:00Z');
+  });
+
   it('rejects records without a job title', () => {
     expect(normalizeJob({ company: 'Example' }, 'example-mcp', profile)).toBeUndefined();
   });
