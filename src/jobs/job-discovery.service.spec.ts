@@ -6,6 +6,10 @@ describe('resolveJobicyGeo', () => {
     expect(resolveJobicyGeo({ jobTitle: 'Backend Engineer', location: 'Delhi NCR' })).toBe('apac');
   });
 
+  it('uses Jobicy country slugs for supported country-specific filters', () => {
+    expect(resolveJobicyGeo({ jobTitle: 'Developer', location: 'Toronto, Canada' })).toBe('canada');
+  });
+
   it('maps known European and US preferences to their supported regions', () => {
     expect(resolveJobicyGeo({ jobTitle: 'Developer', location: 'London, UK' })).toBe('europe');
     expect(resolveJobicyGeo({ jobTitle: 'Developer', location: 'New York, USA' })).toBe('usa');
