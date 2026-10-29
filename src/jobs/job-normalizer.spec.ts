@@ -50,7 +50,7 @@ describe('job-normalizer', () => {
       salaryMin: 120000,
       salaryMax: 180000,
       workMode: 'remote',
-    }, 'Senior Backend Engineer', 'Bengaluru', profile);
+    }, 'Senior Backend Engineer', 'Bengaluru', { ...profile, skills: Array.from({ length: 20 }, () => 'backend') });
 
     expect(result.score).toBe(100);
   });
