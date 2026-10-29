@@ -9,6 +9,21 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      AGENT_API_KEY: ci-smoke-key-not-for-production
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      AUTO_SUBMIT_ENABLED: "false"
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,3 +34,29 @@ jobs:
       - run: npm run lint:types
       - run: npm test -- --coverage
       - run: npm run build
+      - name: Smoke test the compiled API and local demo MCP source
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run start:prod > /tmp/nvoid-agent.log 2>&1 &
+          server_pid=$!
+          cleanup() {
+            if kill -0 "$server_pid" 2>/dev/null; then
+              kill "$server_pid" || true
+            fi
+            wait "$server_pid" 2>/dev/null || true
+            cat /tmp/nvoid-agent.log
+          }
+          trap cleanup EXIT
+          for attempt in $(seq 1 45); do
+            if curl --silent --show-error --fail http://127.0.0.1:3100/api/health > /tmp/nvoid-agent-health.json 2>/dev/null; then
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              cat /tmp/nvoid-agent.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat /tmp/nvoid-agent-health.json
+          AGENT_API_KEY="$AGENT_API_KEY" npm run smoke:test
