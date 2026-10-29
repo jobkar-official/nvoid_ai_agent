@@ -3,7 +3,7 @@ export default () => ({
   agentApiKey: process.env.AGENT_API_KEY ?? '',
   mcpServersConfig: process.env.MCP_SERVERS_CONFIG ?? './config/mcp-servers.json',
   mcpConnectTimeoutMs: Number.parseInt(process.env.MCP_CONNECT_TIMEOUT_MS ?? '15000', 10),
-  mcpCallTimeoutMs: Number.parseInt(process.env.MCP_CALL_TIMEOUT_MS ?? '60000', 10),
+  mcpCallTimeoutMs: Number.parseInt(process.env.MCP_CALL_TIMEOUT_MS ?? '210000', 10),
   redis: {
     host: process.env.REDIS_HOST ?? '127.0.0.1',
     port: Number.parseInt(process.env.REDIS_PORT ?? '6379', 10),
