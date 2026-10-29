@@ -3,7 +3,7 @@ const readline = require('node:readline');
 
 const MODE = process.argv[2];
 const API_BASE = 'https://api.apify.com/v2';
-const MAX_WAIT_MS = 210000;
+const MAX_WAIT_MS = 180000;
 const POLL_INTERVAL_MS = 2500;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const MODES = {
