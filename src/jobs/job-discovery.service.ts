@@ -50,7 +50,7 @@ export class JobDiscoveryService {
               ...(args ?? {}),
               tag: profile.jobTitle,
               geo: resolveJobicyGeo(profile),
-              count: Math.min(200, requestedLimit),
+              count: 200,
             }
           : args ?? {};
         const result = entry.server.id === 'jobicy'
@@ -100,7 +100,7 @@ export class JobDiscoveryService {
   }
 
   private async callJobicyWithCache(serverId: string, tool: string, args: Record<string, unknown>): Promise<unknown> {
-    const cacheKey = JSON.stringify({ serverId, tool, args });
+    const cacheKey = JSON.stringify({ serverId, tool, tag: args.tag, geo: args.geo });
     const now = Date.now();
     const cached = this.jobicyCache.get(cacheKey);
     if (cached && cached.expiresAt > now) return cached.result;
