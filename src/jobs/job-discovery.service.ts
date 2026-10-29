@@ -72,13 +72,18 @@ export class JobDiscoveryService {
           : await this.mcpRegistry.callTool(entry.server.id, entry.tool, sourceArgs);
         const rawJobs = parseMcpJobResult(result);
         const jobs = rawJobs
-          .map((raw) => normalizeJob(raw, entry.server.id, profile))
+          .map((raw) => normalizeJob(raw, resolveSourceId(entry.server.id, raw), profile))
           .filter((job): job is NormalizedJob => Boolean(job))
           .map((job) => {
             if (entry.server.id === 'remoteok') {
               const directUrl = job.raw?.apply_url ?? job.raw?.applyUrl ?? job.raw?.application_url;
               const applicationUrl = resolveRemoteOkApplicationUrl(job.jobUrl, directUrl);
               return { ...job, applicationUrl, workMode: job.workMode ?? 'Remote' };
+            }
+            if (entry.server.id === 'apify-boards' || entry.server.id === 'apify-apna') {
+              const directUrl = job.raw?.directUrl ?? job.raw?.job_url_direct ?? job.raw?.applicationUrl ?? job.raw?.application_url;
+              const applicationUrl = resolveRemoteOkApplicationUrl(job.jobUrl, directUrl);
+              return { ...job, applicationUrl };
             }
             if (['jobicy', 'arbeitnow', 'workingnomads', 'himalayas', 'adzuna', 'jooble'].includes(entry.server.id)) {
               return { ...job, applicationUrl: undefined };
@@ -143,6 +148,27 @@ export class JobDiscoveryService {
     this.jobicyCache.set(cacheKey, { expiresAt: now + 60 * 60 * 1000, result });
     return result;
   }
+}
+
+function resolveSourceId(serverId: string, raw: unknown): string {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return serverId;
+  }
+  const record = raw as Record<string, unknown>;
+  if (serverId === 'apify-apna') return 'apna';
+  if (serverId === 'apify-boards') {
+    const source = String(record.source ?? record.site ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const sources: Record<string, string> = {
+      naukri: 'naukri',
+      linkedin: 'linkedin',
+      indeed: 'indeed',
+      glassdoor: 'glassdoor',
+      ziprecruiter: 'ziprecruiter',
+      bayt: 'bayt',
+    };
+    return sources[source] ?? 'apify-boards';
+  }
+  return serverId;
 }
 
 function inferArguments(schemaValue: unknown, profile: JobProfile, limit: number): Record<string, unknown> | undefined {
