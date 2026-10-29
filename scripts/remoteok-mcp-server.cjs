@@ -51,6 +51,13 @@ function jobText(job) {
   ].map(text).join(' ').toLowerCase();
 }
 
+function matchesQuery(job, query) {
+  const queryTokens = tokens(query).filter((term) => !['the', 'and', 'for', 'with', 'senior', 'junior', 'lead', 'staff', 'principal', 'remote', 'full', 'time', 'developer', 'engineer', 'software'].includes(term));
+  const candidates = queryTokens.length > 0 ? queryTokens : tokens(query);
+  const searchable = jobText(job);
+  return candidates.length === 0 || candidates.some((term) => searchable.includes(term));
+}
+
 function matchesLocation(job, requested) {
   const location = String(requested || '').trim();
   if (!location || /^(remote|worldwide|global|anywhere|all locations|all countries)$/i.test(location)) return true;
@@ -111,15 +118,8 @@ async function searchJobs(args) {
   const query = String(args.query || '').trim();
   if (!query) throw new Error('A job title or search query is required.');
   const location = String(args.location || 'Worldwide').trim();
-  const queryTokens = tokens(query).filter((term) => !['the', 'and', 'for', 'with', 'senior', 'junior', 'lead', 'staff', 'principal', 'remote', 'full', 'time', 'developer', 'engineer', 'software'].includes(term));
-  const broadTokens = tokens(query).filter((term) => term.length > 2);
   const allJobs = await getJobs();
-
-  const matching = allJobs.filter((job) => {
-    const haystack = jobText(job);
-    const hasRoleMatch = broadTokens.length === 0 || [...queryTokens, ...broadTokens.filter((term) => !queryTokens.includes(term))].some((term) => haystack.includes(term));
-    return hasRoleMatch && matchesLocation(job, location);
-  });
+  const matching = allJobs.filter((job) => matchesQuery(job, query) && matchesLocation(job, location));
 
   const limitNumber = Number(args.limit);
   const limit = Number.isFinite(limitNumber) ? Math.min(100, Math.max(1, Math.floor(limitNumber))) : 30;
@@ -201,14 +201,20 @@ async function handle(message) {
   respondError(id, -32601, 'Unsupported method: ' + message.method);
 }
 
-const input = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
-input.on('line', (line) => {
-  if (!line.trim()) return;
-  try {
-    void handle(JSON.parse(line)).catch((error) => {
-      process.stderr.write('Remote OK MCP request failed: ' + (error instanceof Error ? error.message : String(error)) + '\n');
-    });
-  } catch {
-    process.stderr.write('Ignored invalid JSON on Remote OK MCP input.\n');
-  }
-});
+function start() {
+  const input = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+  input.on('line', (line) => {
+    if (!line.trim()) return;
+    try {
+      void handle(JSON.parse(line)).catch((error) => {
+        process.stderr.write('Remote OK MCP request failed: ' + (error instanceof Error ? error.message : String(error)) + '\n');
+      });
+    } catch {
+      process.stderr.write('Ignored invalid JSON on Remote OK MCP input.\n');
+    }
+  });
+}
+
+if (require.main === module) start();
+
+module.exports = { matchesLocation, matchesQuery, regionFor };
