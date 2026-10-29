@@ -35,7 +35,19 @@ export class McpConfigService {
       ids.add(server.id);
     }
 
-    this.servers = servers.map((server) => this.resolveEnvironment(server));
+    const resolved = servers.map((server) => this.resolveEnvironment(server));
+    this.servers = resolved.map((server) => {
+      if (server.enabled) return server;
+      const has = (...names: string[]) => names.every((name) => {
+        const value = process.env[name];
+        return Boolean(value?.trim() && !value.includes(String.fromCharCode(36) + '{'));
+      });
+      const canEnable =
+        (server.id === 'apify-boards' || server.id === 'apify-apna') && has('APIFY_API_TOKEN') ||
+        server.id === 'adzuna' && has('ADZUNA_APP_ID', 'ADZUNA_APP_KEY') ||
+        server.id === 'jooble' && has('JOOBLE_API_KEY');
+      return canEnable ? { ...server, enabled: true } : server;
+    });
     return this.servers;
   }
 
