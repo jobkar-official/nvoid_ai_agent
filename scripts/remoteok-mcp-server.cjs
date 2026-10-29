@@ -100,6 +100,15 @@ function countriesFor(value) {
 function isExplicitGlobalEligibility(value) {
   return /\b(available worldwide|worldwide eligible|work from anywhere|remote from anywhere|remote worldwide|anywhere in the world|open to candidates worldwide|eligible in all countries|remote from any location)\b/i.test(String(value || ''));
 }
+function displayLocation(job) {
+  const primary = text(job.location);
+  const restriction = text(job.location_country || job.location_restrictions || job.locationRestrictions || job.allowedCountries || job.allowed_countries || job.countries);
+  if (primary && !/^(remote|remote only|remote eligible|remote · eligibility not stated)$/i.test(primary)) return primary;
+  if (restriction) return primary ? primary + ' · ' + restriction : restriction;
+  if (isExplicitGlobalEligibility(job.description)) return 'Worldwide';
+  return primary || 'Remote · eligibility not stated';
+}
+
 
 function isGlobalLocation(value) {
   return /\b(worldwide|anywhere|global|all countries|work from anywhere|remote worldwide)\b/i.test(String(value || ''));
@@ -250,7 +259,7 @@ async function searchJobs(args) {
     id: text(job.id || job.slug),
     title: text(job.position || job.title),
     company: text(job.company || job.company_name),
-    location: text(job.location || job.location_country || job.location_restrictions || job.locationRestrictions || job.allowedCountries || job.allowed_countries || (isExplicitGlobalEligibility(job.description) ? 'Worldwide' : 'Remote · eligibility not stated')),
+    location: displayLocation(job),
     country: text(job.location_country || job.country),
     locationRestrictions: text(job.locationRestrictions || job.location_restrictions),
     allowedCountries: text(job.allowedCountries || job.allowed_countries),
@@ -342,4 +351,4 @@ function start() {
 
 if (require.main === module) start();
 
-module.exports = { matchesLocation, matchesQuery, regionFor, regionsFor, countriesFor, roleFamily };
+module.exports = { matchesLocation, matchesQuery, regionFor, regionsFor, countriesFor, roleFamily, displayLocation };
