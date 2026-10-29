@@ -133,7 +133,7 @@ function countriesIn(value: unknown): string[] {
     ['united-kingdom', /\b(united kingdom|uk|england|scotland|wales|london|manchester|birmingham)\b/],
     ['germany', /\b(germany|berlin|munich|frankfurt|hamburg)\b/],
     ['france', /\b(france|paris|lyon)\b/],
-    ['netherlands', /\b(net herlands|amsterdam|rotterdam|utrecht)\b/],
+    ['netherlands', /\b(netherlands|amsterdam|rotterdam|utrecht)\b/],
     ['ireland', /\b(ireland|dublin|cork)\b/],
     ['spain', /\b(spain|madrid|barcelona)\b/],
     ['italy', /\b(italy|rome|milan)\b/],
