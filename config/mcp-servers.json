@@ -1,5 +1,29 @@
 [
   {
+    "id": "demo",
+    "name": "Nvoid Local Demo Jobs (synthetic data)",
+    "enabled": true,
+    "transport": "stdio",
+    "command": "node",
+    "args": [
+      "./scripts/demo-mcp-server.cjs"
+    ],
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        }
+      }
+    }
+  },
+  {
     "id": "naukri",
     "name": "Naukri MCP",
     "enabled": false,
@@ -11,9 +35,15 @@
     "jobSearch": {
       "tool": "REPLACE_WITH_ACTUAL_SEARCH_TOOL_NAME",
       "arguments": {
-        "query": { "$profile": "jobTitle" },
-        "location": { "$profile": "location" },
-        "limit": { "$context": "limit" }
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        }
       }
     }
   },
@@ -29,9 +59,15 @@
     "jobSearch": {
       "tool": "REPLACE_WITH_ACTUAL_SEARCH_TOOL_NAME",
       "arguments": {
-        "keywords": { "$profile": "jobTitle" },
-        "location": { "$profile": "location" },
-        "count": { "$context": "limit" }
+        "keywords": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "count": {
+          "$context": "limit"
+        }
       }
     }
   }
