@@ -43,7 +43,7 @@ export class McpConfigService {
         return Boolean(value?.trim() && !value.includes(String.fromCharCode(36) + '{'));
       });
       const canEnable =
-        server.id === 'brave-search' && has('BRAVE_SEARCH_API_KEY') ||
+        server.id === 'serper-search' && has('SERPER_API_KEY') ||
         server.id === 'greenhouse' && has('GREENHOUSE_BOARDS') ||
         server.id === 'lever' && has('LEVER_SITES') ||
         server.id === 'ashby' && has('ASHBY_BOARDS') ||
