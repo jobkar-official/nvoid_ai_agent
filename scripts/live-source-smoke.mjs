@@ -71,6 +71,10 @@ if (jobs.length === 0) throw new Error('All live sources responded but the combi
 const liveSourceIds = ['jobicy', 'remoteok', 'arbeitnow', 'workingnomads', 'himalayas'];
 const invalid = jobs.filter((job) => !liveSourceIds.includes(job.source) || !/^https?:\/\//i.test(job.jobUrl || ''));
 if (invalid.length) throw new Error('Search returned a non-live source or a listing without an external URL: ' + JSON.stringify(invalid.slice(0, 2)));
+const offRoleSeniority = jobs.filter((job) => /\b(director|head of|vice president|\bvp\b|chief|cto|cio|ceo|engineering manager|software manager|team lead|lead software engineer|principal engineer|distinguished engineer)\b/i.test(job.title || ''));
+if (offRoleSeniority.length) {
+  throw new Error('Role matching returned leadership-level jobs for the Software Developer query: ' + JSON.stringify(offRoleSeniority.map((job) => ({ title: job.title, source: job.source, url: job.jobUrl })).slice(0, 3)));
+}
 
 console.log('LIVE SOURCE CHECK PASSED');
 console.log('Connected sources: ' + health.mcp.connected + '/' + health.mcp.configured);
