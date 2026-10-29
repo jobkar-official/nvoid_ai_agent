@@ -48,7 +48,7 @@ function regionFor(value) {
 }
 
 function countriesFor(value) {
-  const s = normalize(value);
+  const s = normalizeLocation(value);
   const checks = [
     ['india', /\b(india|bengaluru|bangalore|delhi|delhi ncr|mumbai|hyderabad|chennai|pune|kolkata|noida|gurugram|gurgaon)\b/],
     ['australia', /\b(australia|sydney|melbourne|perth|brisbane|adelaide)\b/],
