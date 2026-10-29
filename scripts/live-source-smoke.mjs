@@ -1,0 +1,83 @@
+const baseUrl = (process.env.NVOID_AGENT_URL || 'http://127.0.0.1:3100').replace(/\/+$/, '');
+const apiKey = process.env.AGENT_API_KEY;
+
+if (!apiKey) {
+  throw new Error('AGENT_API_KEY must be set for the live-source smoke test.');
+}
+
+async function request(path, options = {}) {
+  const response = await fetch(baseUrl + path, {
+    ...options,
+    headers: {
+      accept: 'application/json',
+      'x-agent-api-key': apiKey,
+      ...(options.body ? { 'content-type': 'application/json' } : {}),
+      ...(options.headers || {})
+    },
+    signal: AbortSignal.timeout(90000)
+  });
+  const raw = await response.text();
+  let data;
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    data = { error: raw };
+  }
+  if (!response.ok) {
+    throw new Error(path + ' returned HTTP ' + response.status + ': ' + JSON.stringify(data));
+  }
+  return data;
+}
+
+const profile = {
+  userId: 'nvoid-live-source-smoke',
+  jobTitle: 'Software Developer',
+  location: 'Worldwide',
+  countries: ['India', 'Germany', 'United Kingdom', 'Canada', 'Worldwide'],
+  skills: ['TypeScript', 'Java', 'Python', 'Node.js'],
+  keywords: ['backend', 'API', 'remote'],
+  experienceYears: 3,
+  employmentTypes: ['full-time'],
+  remote: true
+};
+
+const health = await request('/api/health');
+if (health.status !== 'ok') throw new Error('Agent health check failed.');
+if ((health.mcp?.connected ?? 0) < 2) {
+  throw new Error('Expected both live MCP sources to be connected; health returned ' + JSON.stringify(health.mcp));
+}
+
+const search = await request('/api/jobs/search', {
+  method: 'POST',
+  body: JSON.stringify({ profile, limit: 30, syncToBackend: false })
+});
+
+const sources = Array.isArray(search.sources) ? search.sources : [];
+const sourceIds = new Set(sources.map((source) => source.serverId));
+for (const requiredSource of ['jobicy', 'remoteok']) {
+  if (!sourceIds.has(requiredSource)) {
+    throw new Error('Live source ' + requiredSource + ' was not included in search results: ' + JSON.stringify(sources));
+  }
+}
+
+const failedSources = sources.filter((source) => source.error);
+if (failedSources.length) {
+  throw new Error('A live provider request failed: ' + JSON.stringify(failedSources));
+}
+
+const jobs = Array.isArray(search.jobs) ? search.jobs : [];
+if (jobs.length === 0) throw new Error('Both providers responded but the combined live search returned zero jobs.');
+
+const invalid = jobs.filter((job) => !['jobicy', 'remoteok'].includes(job.source) || !/^https?:\/\//i.test(job.jobUrl || ''));
+if (invalid.length) throw new Error('Search returned a non-live source or a listing without an external URL: ' + JSON.stringify(invalid.slice(0, 2)));
+
+console.log('LIVE SOURCE CHECK PASSED');
+console.log('Connected sources: ' + health.mcp.connected + '/' + health.mcp.configured);
+for (const source of sources) {
+  console.log(source.serverId + ': ' + source.found + ' current listing(s)');
+}
+console.log('Combined results: ' + jobs.length);
+for (const job of jobs.slice(0, 10)) {
+  console.log('- [' + job.source + '] ' + job.title + ' — ' + (job.company || 'Company not listed') + ' — ' + (job.postedAt || 'publication date not supplied') + ' — ' + job.jobUrl);
+}
+console.log('No application was submitted and backend synchronization remained disabled.');
