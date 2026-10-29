@@ -24,6 +24,7 @@ describe('public job board source matching', () => {
     expect(filters.matchesLocation({ location: 'Bengaluru, India' }, 'Bengaluru, India', true)).toBe(true);
     expect(filters.matchesLocation({ location: 'India' }, 'Bengaluru', true)).toBe(true);
     expect(filters.matchesLocation({ location: 'APAC' }, 'Bengaluru', true)).toBe(true);
+    expect(filters.matchesLocation({ location: 'Australia' }, 'Bengaluru', true)).toBe(false);
     expect(filters.matchesLocation({ location: 'United States' }, 'Bengaluru', true)).toBe(false);
   });
 
