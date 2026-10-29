@@ -22,22 +22,52 @@ const SOURCE_CONFIG = {
     maxPages: 5,
     cacheSeconds: 1800
   },
+  remotive: {
+    label: 'Remotive',
+    remoteOnly: true,
+    maxPages: 1,
+    cacheSeconds: 21600
+  },
+  weworkremotely: {
+    label: 'We Work Remotely',
+    remoteOnly: true,
+    maxPages: 1,
+    cacheSeconds: 3600
+  },
+  greenhouse: {
+    label: 'Greenhouse company career boards',
+    remoteOnly: false,
+    maxPages: 1,
+    cacheSeconds: 900
+  },
+  lever: {
+    label: 'Lever company career boards',
+    remoteOnly: false,
+    maxPages: 1,
+    cacheSeconds: 900
+  },
+  ashby: {
+    label: 'Ashby company career boards',
+    remoteOnly: false,
+    maxPages: 1,
+    cacheSeconds: 900
+  },
   adzuna: {
     label: 'Adzuna',
     remoteOnly: false,
     maxPages: 1,
-    cacheSeconds: 1800
+    cacheSeconds: 300
   },
   jooble: {
     label: 'Jooble',
     remoteOnly: false,
     maxPages: 1,
-    cacheSeconds: 1800
+    cacheSeconds: 300
   }
 };
 
 if (!SOURCE_CONFIG[SOURCE] && require.main === module) {
-  process.stderr.write('Set source to arbeitnow, workingnomads, himalayas, adzuna, or jooble in the MCP command arguments.\\n');
+  process.stderr.write('Set source to a supported provider in the MCP command arguments.\\n');
   process.exit(2);
 }
 
@@ -389,7 +419,7 @@ async function fetchJson(url, options = {}) {
 }
 
 async function fetchAllJobs(query, location) {
-  const queryScoped = SOURCE === 'adzuna' || SOURCE === 'jooble';
+  const queryScoped = ['adzuna', 'jooble', 'himalayas', 'greenhouse', 'lever', 'ashby'].includes(SOURCE);
   const cacheKey = queryScoped ? SOURCE + '|' + normalize(query) + '|' + normalize(location) : SOURCE;
   const now = Date.now();
   const cached = cache.get(cacheKey);
@@ -463,7 +493,7 @@ async function fetchAllJobs(query, location) {
       if (!deduped.has(key)) deduped.set(key, job);
     }
     const jobs = [...deduped.values()];
-    cache.set(cacheKey, { jobs, expiresAt: Date.now() + CACHE_TTL_MS });
+    cache.set(cacheKey, { jobs, expiresAt: Date.now() + SOURCE_CONFIG[SOURCE].cacheSeconds * 1000 });
     for (const [key, value] of cache) {
       if (value.expiresAt <= Date.now()) cache.delete(key);
     }
