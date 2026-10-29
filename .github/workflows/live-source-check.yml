@@ -1,6 +1,16 @@
 name: Live job source check
 
 on:
+  push:
+    branches: [development]
+    paths:
+      - .github/workflows/live-source-check.yml
+      - config/mcp-servers.json
+      - scripts/public-job-boards-mcp-server.cjs
+      - scripts/remoteok-mcp-server.cjs
+      - scripts/live-source-smoke.mjs
+      - src/jobs/job-discovery.service.ts
+      - src/jobs/job-relevance.ts
   workflow_dispatch:
 
 permissions:
@@ -38,6 +48,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: node --check scripts/remoteok-mcp-server.cjs
+      - run: node --check scripts/public-job-boards-mcp-server.cjs
       - run: node --check scripts/live-source-smoke.mjs
       - name: Start worker and verify live provider results
         shell: bash
