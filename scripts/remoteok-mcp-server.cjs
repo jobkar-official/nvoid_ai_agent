@@ -250,7 +250,7 @@ async function searchJobs(args) {
     id: text(job.id || job.slug),
     title: text(job.position || job.title),
     company: text(job.company || job.company_name),
-    location: text(job.location || job.location_country || job.location_restrictions || job.locationRestrictions || job.allowedCountries || job.allowed_countries || 'Remote · eligibility not stated'),
+    location: text(job.location || job.location_country || job.location_restrictions || job.locationRestrictions || job.allowedCountries || job.allowed_countries || (isExplicitGlobalEligibility(job.description) ? 'Worldwide' : 'Remote · eligibility not stated')),
     country: text(job.location_country || job.country),
     locationRestrictions: text(job.locationRestrictions || job.location_restrictions),
     allowedCountries: text(job.allowedCountries || job.allowed_countries),
