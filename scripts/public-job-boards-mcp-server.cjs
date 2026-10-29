@@ -41,12 +41,12 @@ if (!SOURCE_CONFIG[SOURCE] && require.main === module) {
   process.exit(2);
 }
 
-let cache = { expiresAt: 0, jobs: [] };
-let inFlight;
+const cache = new Map();
+const inFlight = new Map();
 
 const tools = [{
   name: 'search_jobs',
-  description: 'Search live public job listings from ' + SOURCE_CONFIG[SOURCE].label + ' using a target title and preferred location. Returns provider links and excludes listings without enough matching evidence.',
+  description: 'Search live public job listings from ' + (SOURCE_CONFIG[SOURCE]?.label || 'configured provider') + ' using a target title and preferred location. Returns provider links and excludes listings without enough matching evidence.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -211,6 +211,42 @@ function matchesLocation(job, requested, remoteOnly = false) {
 }
 
 function mapJob(job) {
+  if (SOURCE === 'adzuna') {
+    return {
+      id: text(job.id || job.redirect_url),
+      title: text(job.title),
+      company: text(job.company?.display_name || job.company),
+      location: text(job.location?.display_name || job.location),
+      country: process.env.ADZUNA_COUNTRY || 'in',
+      description: text(job.description),
+      tags: text(job.category?.label || job.category?.tag || job.category),
+      employmentType: text(job.contract_type || job.contract_time),
+      workMode: 'On-site / Hybrid / not specified',
+      salaryMin: typeof job.salary_min === 'number' ? job.salary_min : undefined,
+      salaryMax: typeof job.salary_max === 'number' ? job.salary_max : undefined,
+      salaryCurrency: 'INR',
+      postedAt: text(job.created),
+      url: text(job.redirect_url || job.url),
+      source: 'adzuna',
+      raw: job
+    };
+  }
+  if (SOURCE === 'jooble') {
+    return {
+      id: text(job.id || job.link),
+      title: text(job.title),
+      company: text(job.company),
+      location: text(job.location),
+      description: text(job.snippet || job.description),
+      tags: text(job.type || job.category),
+      employmentType: text(job.type),
+      salary: text(job.salary),
+      postedAt: text(job.updated),
+      url: text(job.link || job.url),
+      source: 'jooble',
+      raw: job
+    };
+  }
   if (SOURCE === 'arbeitnow') {
     return {
       id: text(job.slug || job.id),
@@ -263,21 +299,58 @@ function mapJob(job) {
   };
 }
 
-async function fetchJson(url) {
+async function fetchJson(url, options = {}) {
   const response = await fetch(url, {
-    headers: { accept: 'application/json', 'user-agent': 'NvoidJobAgent/1.0 (+https://jobkar.in)' },
+    ...options,
+    headers: {
+      accept: 'application/json',
+      'user-agent': 'NvoidJobAgent/1.0 (+https://jobkar.in)',
+      ...(options.body ? { 'content-type': 'application/json' } : {}),
+      ...(options.headers || {})
+    },
     signal: AbortSignal.timeout(25000)
   });
   if (!response.ok) throw new Error(SOURCE_CONFIG[SOURCE].label + ' feed returned HTTP ' + response.status);
   return response.json();
 }
 
-async function fetchAllJobs() {
-  if (cache.expiresAt > Date.now()) return cache.jobs;
-  if (inFlight) return inFlight;
-  inFlight = (async () => {
+async function fetchAllJobs(query, location) {
+  const queryScoped = SOURCE === 'adzuna' || SOURCE === 'jooble';
+  const cacheKey = queryScoped ? SOURCE + '|' + normalize(query) + '|' + normalize(location) : SOURCE;
+  const now = Date.now();
+  const cached = cache.get(cacheKey);
+  if (cached && cached.expiresAt > now) return cached.jobs;
+  if (cached) cache.delete(cacheKey);
+  if (inFlight.has(cacheKey)) return inFlight.get(cacheKey);
+
+  const pending = (async () => {
     const rawJobs = [];
-    if (SOURCE === 'arbeitnow') {
+    if (SOURCE === 'adzuna') {
+      const appId = process.env.ADZUNA_APP_ID;
+      const appKey = process.env.ADZUNA_APP_KEY;
+      if (!appId || !appKey || appId.includes('\${') || appKey.includes('\${')) throw new Error('Adzuna requires ADZUNA_APP_ID and ADZUNA_APP_KEY in the worker environment.');
+      const country = (process.env.ADZUNA_COUNTRY || 'in').toLowerCase();
+      const params = new URLSearchParams({
+        app_id: appId,
+        app_key: appKey,
+        what: query,
+        where: location,
+        results_per_page: '50',
+        sort_by: 'date'
+      });
+      const payload = await fetchJson('https://api.adzuna.com/v1/api/jobs/' + encodeURIComponent(country) + '/search/1?' + params.toString());
+      if (!Array.isArray(payload.results)) throw new Error('Adzuna returned an unexpected response.');
+      rawJobs.push(...payload.results);
+    } else if (SOURCE === 'jooble') {
+      const key = process.env.JOOBLE_API_KEY;
+      if (!key || key.includes('\${')) throw new Error('Jooble requires JOOBLE_API_KEY in the worker environment.');
+      const payload = await fetchJson('https://jooble.org/api/' + encodeURIComponent(key), {
+        method: 'POST',
+        body: JSON.stringify({ keywords: query, location, page: 1, ResultOnPage: 100 })
+      });
+      if (!Array.isArray(payload.jobs)) throw new Error('Jooble returned an unexpected response.');
+      rawJobs.push(...payload.jobs);
+    } else if (SOURCE === 'arbeitnow') {
       for (let page = 1; page <= SOURCE_CONFIG[SOURCE].maxPages; page++) {
         const payload = await fetchJson('https://www.arbeitnow.com/api/job-board-api?page=' + page);
         const data = Array.isArray(payload) ? payload : payload.data;
@@ -314,13 +387,19 @@ async function fetchAllJobs() {
       const key = normalize(mapped.url).replace(/\/+$/, '');
       if (!deduped.has(key)) deduped.set(key, job);
     }
-    cache = { jobs: [...deduped.values()], expiresAt: Date.now() + CACHE_TTL_MS };
-    return cache.jobs;
+    const jobs = [...deduped.values()];
+    cache.set(cacheKey, { jobs, expiresAt: Date.now() + CACHE_TTL_MS });
+    for (const [key, value] of cache) {
+      if (value.expiresAt <= Date.now()) cache.delete(key);
+    }
+    if (cache.size > 100) cache.delete(cache.keys().next().value);
+    return jobs;
   })();
+  inFlight.set(cacheKey, pending);
   try {
-    return await inFlight;
+    return await pending;
   } finally {
-    inFlight = undefined;
+    inFlight.delete(cacheKey);
   }
 }
 
@@ -329,7 +408,7 @@ async function searchJobs(args) {
   const location = String(args.location || '').trim();
   if (!query || !location) throw new Error('Both target role and preferred location are required. Use Worldwide for a global search.');
 
-  const rawJobs = await fetchAllJobs();
+  const rawJobs = await fetchAllJobs(query, location);
   const matching = rawJobs.filter((job) => matchesRole(job, query) && matchesLocation(job, location, SOURCE_CONFIG[SOURCE].remoteOnly));
   const limitNumber = Number(args.limit);
   const limit = Number.isFinite(limitNumber) ? Math.min(100, Math.max(1, Math.floor(limitNumber))) : 30;
