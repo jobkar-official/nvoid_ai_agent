@@ -33,9 +33,10 @@ function tokens(value) {
 
 function regionFor(value) {
   const normalized = String(value || '').toLowerCase();
+  if (/\b(latin america|latam|south america|central america|brazil|argentina|mexico|colombia|chile|peru)\b/.test(normalized)) return 'latin-america';
   if (/\b(india|bengaluru|bangalore|delhi|mumbai|hyderabad|chennai|pune|kolkata|asia|apac|singapore|australia|japan|new zealand|philippines|pakistan|nepal|sri lanka|indonesia|thailand|vietnam|hong kong|malaysia)\b/.test(normalized)) return 'apac';
   if (/\b(europe|united kingdom|\buk\b|london|germany|berlin|france|paris|netherlands|amsterdam|ireland|dublin|spain|italy|poland|sweden|norway|finland|portugal|switzerland|austria|belgium|denmark)\b/.test(normalized)) return 'europe';
-  if (/\b(usa|united states|america|new york|san francisco|california|texas|seattle|austin|chicago|boston|los angeles|canada|toronto|vancouver)\b/.test(normalized)) return 'north-america';
+  if (/\b(usa|united states|america|new york|san francisco|california|texas|seattle|austin|chicago|boston|los angeles|canada|toronto|vancouver|north america)\b/.test(normalized)) return 'north-america';
   return undefined;
 }
 
@@ -54,16 +55,29 @@ function matchesLocation(job, requested) {
   const location = String(requested || '').trim();
   if (!location || /^(remote|worldwide|global|anywhere|all locations|all countries)$/i.test(location)) return true;
 
-  const actual = [job.location, job.location_country, job.region, job.tags].map(text).join(' ');
-  if (isGlobalLocation(actual)) return true;
+  const structuredLocation = [job.location, job.location_country, job.region].map(text).join(' ').trim();
+  if (isGlobalLocation(structuredLocation)) return true;
 
   const requestedTerms = tokens(location);
-  const actualLower = actual.toLowerCase();
-  if (requestedTerms.some((term) => actualLower.includes(term))) return true;
+  const structuredLower = structuredLocation.toLowerCase();
+  if (requestedTerms.some((term) => structuredLower.includes(term))) return true;
 
   const requestedRegion = regionFor(location);
-  const listingRegion = regionFor(actual);
-  return Boolean(requestedRegion && listingRegion && requestedRegion === listingRegion);
+  const listedRegion = regionFor(structuredLocation);
+  if (requestedRegion && listedRegion) return requestedRegion === listedRegion;
+  if (structuredLocation) return false;
+
+  const description = text(job.description);
+  if (isGlobalLocation(description)) return true;
+  const restriction = description.match(/(?:based in|based out of|located in|must be (?:located|based|resident) in|residing in|residing within|candidates? (?:must|should) be (?:located|based) in|only available in|available only in|position is restricted to)\\s+([^.<\\n]{2,70})/i);
+  const restrictedRegion = restriction ? regionFor(restriction[1]) : undefined;
+  if (requestedRegion && restrictedRegion) return requestedRegion === restrictedRegion;
+  if (requestedRegion && /\\b(latin america|latam|south america|central america|north america|europe|apac|asia|united states|usa|canada|india|australia|united kingdom|uk)\\b/i.test(description)) {
+    const mentionedRegion = regionFor(description);
+    if (mentionedRegion && mentionedRegion !== requestedRegion) return false;
+  }
+
+  return true;
 }
 
 async function getJobs() {
@@ -113,7 +127,7 @@ async function searchJobs(args) {
     id: text(job.id || job.slug),
     title: text(job.position || job.title),
     company: text(job.company || job.company_name),
-    location: text(job.location || job.location_country || 'Remote'),
+    location: text(job.location || job.location_country || 'Remote · eligibility not stated'),
     country: text(job.location_country),
     description: text(job.description),
     tags: Array.isArray(job.tags) ? job.tags : [],
