@@ -79,14 +79,22 @@ function rawRoleEvidence(raw: Record<string, unknown> | undefined): string {
   }).join(' ');
 }
 
-export function matchesJobTitle(title: string, raw: Record<string, unknown> | undefined, targetTitle: string): boolean {
+export function matchesJobTitle(title: string, raw: Record<string, unknown> | undefined, targetTitle: string, experienceYears?: number): boolean {
   if (!title.trim() || !targetTitle.trim()) return false;
   const target = normalize(targetTitle);
+  const normalizedTitle = normalize(title);
   const searchable = normalize(title + ' ' + rawRoleEvidence(raw));
   const targetFamily = roleFamily(target);
   const jobFamily = roleFamily(title);
+  const targetWantsLeadership = /\b(manager|management|director|head|chief|vice president|vp|lead)\b/.test(target);
+  const jobIsLeadership = /\b(manager|management|director|head|chief|vice president|vp)\b/.test(normalizedTitle);
 
   if (targetFamily && jobFamily && targetFamily !== jobFamily) return false;
+  if (jobIsLeadership && !targetWantsLeadership) return false;
+  if (/\b(intern|internship|apprentice|trainee)\b/.test(normalizedTitle) && !/\b(intern|internship|apprentice|trainee)\b/.test(target)) return false;
+  if (/\b(principal|distinguished|fellow|staff engineer)\b/.test(normalizedTitle)
+    && !/\b(principal|distinguished|fellow|staff engineer)\b/.test(target)
+    && (experienceYears ?? 0) < 7) return false;
 
   const targetSpecificTerms = [...new Set(tokens(target).filter((term) => !ROLE_STOPWORDS.has(term)))];
   if (targetSpecificTerms.length) {
