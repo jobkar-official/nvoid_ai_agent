@@ -391,7 +391,9 @@
     "env": {
       "APIFY_API_TOKEN": "${APIFY_API_TOKEN}",
       "APIFY_JOB_BOARDS_SITES": "${APIFY_JOB_BOARDS_SITES}",
-      "APIFY_JOB_MAX_AGE_HOURS": "${APIFY_JOB_MAX_AGE_HOURS}"
+      "APIFY_JOB_MAX_AGE_HOURS": "${APIFY_JOB_MAX_AGE_HOURS}",
+      "APIFY_JOB_BOARDS_MAX_RESULTS": "${APIFY_JOB_BOARDS_MAX_RESULTS}",
+      "APIFY_APNA_MAX_ITEMS": "${APIFY_APNA_MAX_ITEMS}"
     },
     "jobSearch": {
       "tool": "search_jobs",
@@ -428,7 +430,9 @@
       "apna"
     ],
     "env": {
-      "APIFY_API_TOKEN": "${APIFY_API_TOKEN}"
+      "APIFY_API_TOKEN": "${APIFY_API_TOKEN}",
+      "APIFY_JOB_BOARDS_MAX_RESULTS": "${APIFY_JOB_BOARDS_MAX_RESULTS}",
+      "APIFY_APNA_MAX_ITEMS": "${APIFY_APNA_MAX_ITEMS}"
     },
     "jobSearch": {
       "tool": "search_jobs",
