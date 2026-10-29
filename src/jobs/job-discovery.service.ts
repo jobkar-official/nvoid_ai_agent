@@ -179,6 +179,7 @@ export function resolveJobicyGeo(profile: JobProfile): string {
 }
 
 function regionForJobicyLocation(value: string): string | undefined {
+  if (/\b(canada|toronto|vancouver|montreal|calgary|ottawa|edmonton)\b/.test(value)) return 'canada';
   if (/\b(india|bengaluru|bangalore|delhi|mumbai|hyderabad|chennai|pune|kolkata|asia|apac|singapore|australia|japan|new zealand|philippines|pakistan|nepal|sri lanka|indonesia|thailand|vietnam|hong kong|malaysia)\b/.test(value)) return 'apac';
   if (/\b(europe|united kingdom|uk|london|germany|berlin|france|paris|netherlands|amsterdam|ireland|dublin|spain|italy|poland|sweden|norway|finland|portugal|switzerland|austria|belgium|denmark)\b/.test(value)) return 'europe';
   if (/\b(usa|united states|america|new york|san francisco|california|texas|seattle|austin|chicago|boston|los angeles)\b/.test(value)) return 'usa';
