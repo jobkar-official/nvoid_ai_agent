@@ -81,4 +81,33 @@ console.log('Combined results: ' + jobs.length);
 for (const job of jobs.slice(0, 10)) {
   console.log('- [' + job.source + '] ' + job.title + ' — ' + (job.company || 'Company not listed') + ' — ' + (job.postedAt || 'publication date not supplied') + ' — ' + job.jobUrl);
 }
+const cityProfile = {
+  ...profile,
+  jobTitle: 'Software Developer',
+  location: 'Bengaluru, India',
+  countries: ['India'],
+  remote: false
+};
+const citySearch = await request('/api/jobs/search', {
+  method: 'POST',
+  body: JSON.stringify({ profile: cityProfile, limit: 30, syncToBackend: false })
+});
+const citySources = Array.isArray(citySearch.sources) ? citySearch.sources : [];
+const cityErrors = citySources.filter((source) => source.error);
+if (cityErrors.length) {
+  throw new Error('City-specific search had live source errors: ' + JSON.stringify(cityErrors));
+}
+const cityJobs = Array.isArray(citySearch.jobs) ? citySearch.jobs : [];
+const invalidCityJobs = cityJobs.filter((job) => !liveSourceIds.includes(job.source) || !/^https?:\/\//i.test(job.jobUrl || ''));
+if (invalidCityJobs.length) {
+  throw new Error('City-specific search returned a non-live source or a listing without a URL: ' + JSON.stringify(invalidCityJobs.slice(0, 2)));
+}
+console.log('City-specific query: Software Developer · Bengaluru, India');
+for (const source of citySources) {
+  console.log(source.serverId + ' city matches: ' + source.found);
+}
+console.log('Combined city-eligible results: ' + cityJobs.length);
+for (const job of cityJobs.slice(0, 10)) {
+  console.log('- [' + job.source + '] ' + job.title + ' — ' + (job.company || 'Company not listed') + ' — ' + (job.location || 'location not listed') + ' — ' + job.jobUrl);
+}
 console.log('No application was submitted and backend synchronization remained disabled.');
