@@ -60,7 +60,15 @@ export class JobDiscoveryService {
         const jobs = rawJobs
           .map((raw) => normalizeJob(raw, entry.server.id, profile))
           .filter((job): job is NormalizedJob => Boolean(job))
-          .map((job) => entry.server.id === 'jobicy' ? { ...job, applicationUrl: undefined } : job);
+          .map((job) => {
+            if (entry.server.id === 'jobicy') return { ...job, applicationUrl: undefined };
+            if (entry.server.id === 'remoteok') {
+              const directUrl = job.raw?.apply_url ?? job.raw?.applyUrl ?? job.raw?.application_url;
+              const applicationUrl = typeof directUrl === 'string' && /^https?:\/\//i.test(directUrl) ? directUrl : undefined;
+              return { ...job, applicationUrl, workMode: job.workMode ?? 'Remote' };
+            }
+            return job;
+          });
         return { serverId: entry.server.id, tool: entry.tool, jobs };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
