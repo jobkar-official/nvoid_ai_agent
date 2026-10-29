@@ -407,9 +407,6 @@
         "limit": {
           "$context": "limit"
         },
-        "remoteOnly": {
-          "$profile": "remote"
-        },
         "skills": {
           "$profile": "skills"
         },
@@ -445,9 +442,6 @@
         },
         "limit": {
           "$context": "limit"
-        },
-        "remoteOnly": {
-          "$profile": "remote"
         },
         "skills": {
           "$profile": "skills"
