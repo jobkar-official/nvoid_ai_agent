@@ -178,6 +178,9 @@ function matchesLocation(job, requested) {
   const listedRegions = regionsFor(structuredLocation);
   if (requestedRegions.length && listedRegions.length) return requestedRegions.some((region) => listedRegions.includes(region));
 
+  const description = text(job.description);
+  if (isExplicitGlobalEligibility(description)) return true;
+
   if (structuredLocation) {
     const requestedTerms = tokens(location).filter((term) => term.length > 2);
     const actualTerms = new Set(tokens(structuredLocation));
@@ -185,8 +188,6 @@ function matchesLocation(job, requested) {
     return false;
   }
 
-  const description = text(job.description);
-  if (isExplicitGlobalEligibility(description)) return true;
   const restriction = description.match(/(?:based in|based out of|located in|must be (?:located|based|resident) in|residing in|residing within|candidates? (?:must|should) be (?:located|based) in|only available in|available only in|position is restricted to)\s+([^.<\n]{2,70})/i);
   if (restriction) {
     const requestedCountries = countriesFor(location);
