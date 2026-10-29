@@ -120,9 +120,11 @@ export class McpRegistryService implements OnApplicationBootstrap, OnModuleDestr
     if (!registeredTool) throw new Error(`Tool ${toolName} is not available on MCP server ${serverId}.`);
 
     const configuredTimeoutMs = this.configService.get<number>('mcpCallTimeoutMs', 210000);
-    const timeoutMs = ['apify-boards', 'apify-apna'].includes(serverId)
-      ? Math.max(configuredTimeoutMs, 200000)
-      : configuredTimeoutMs;
+    const timeoutMs = serverId === 'brave-search'
+      ? Math.max(configuredTimeoutMs, 300000)
+      : ['apify-boards', 'apify-apna'].includes(serverId)
+        ? Math.max(configuredTimeoutMs, 200000)
+        : configuredTimeoutMs;
     const result = await withTimeout(entry.client.callTool({ name: toolName, arguments: args }), timeoutMs, `MCP call ${serverId}/${toolName}`);
 
     if (result && typeof result === 'object' && 'isError' in result && result.isError) {
