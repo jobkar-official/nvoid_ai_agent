@@ -453,8 +453,8 @@
     }
   },
   {
-    "id": "brave-search",
-    "name": "Brave Search Engine and Public Job Page Crawler",
+    "id": "serper-search",
+    "name": "Serper Google Search and Public Job Page Crawler",
     "enabled": false,
     "transport": "stdio",
     "command": "node",
@@ -462,7 +462,7 @@
       "./scripts/search-engine-jobs-mcp-server.cjs"
     ],
     "env": {
-      "BRAVE_SEARCH_API_KEY": "${BRAVE_SEARCH_API_KEY}"
+      "SERPER_API_KEY": "${SERPER_API_KEY}"
     },
     "jobSearch": {
       "tool": "search_jobs",
