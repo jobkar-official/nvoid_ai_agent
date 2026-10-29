@@ -31,13 +31,20 @@ function tokens(value) {
   return String(value || '').toLowerCase().split(/[^a-z0-9+#.]+/).filter((part) => part.length > 2);
 }
 
-function regionFor(value) {
+function regionsFor(value) {
   const normalized = String(value || '').toLowerCase();
-  if (/\b(latin america|latam|south america|central america|brazil|argentina|mexico|colombia|chile|peru)\b/.test(normalized)) return 'latin-america';
-  if (/\b(india|bengaluru|bangalore|delhi|mumbai|hyderabad|chennai|pune|kolkata|asia|apac|singapore|australia|japan|new zealand|philippines|pakistan|nepal|sri lanka|indonesia|thailand|vietnam|hong kong|malaysia)\b/.test(normalized)) return 'apac';
-  if (/\b(europe|united kingdom|\buk\b|london|germany|berlin|france|paris|netherlands|amsterdam|ireland|dublin|spain|italy|poland|sweden|norway|finland|portugal|switzerland|austria|belgium|denmark)\b/.test(normalized)) return 'europe';
-  if (/\b(usa|united states|america|new york|san francisco|california|texas|seattle|austin|chicago|boston|los angeles|canada|toronto|vancouver|north america)\b/.test(normalized)) return 'north-america';
-  return undefined;
+  const regions = [];
+  if (/\b(latin america|latam|south america|central america|brazil|argentina|mexico|colombia|chile|peru)\b/.test(normalized)) regions.push('latin-america');
+  if (/\b(india|bengaluru|bangalore|delhi|mumbai|hyderabad|chennai|pune|kolkata|asia|apac|singapore|australia|japan|new zealand|philippines|pakistan|nepal|sri lanka|indonesia|thailand|vietnam|hong kong|malaysia)\b/.test(normalized)) regions.push('apac');
+  if (/\b(europe|united kingdom|\buk\b|london|germany|berlin|france|paris|netherlands|amsterdam|ireland|dublin|spain|italy|poland|sweden|norway|finland|portugal|switzerland|austria|belgium|denmark)\b/.test(normalized)) regions.push('europe');
+  if (/\b(usa|united states|america|new york|san francisco|california|texas|seattle|austin|chicago|boston|los angeles|canada|toronto|vancouver|north america)\b/.test(normalized)) regions.push('north-america');
+  if (/\b(middle east|uae|united arab emirates|dubai|saudi arabia|qatar|kuwait|bahrain|oman)\b/.test(normalized)) regions.push('middle-east');
+  if (/\b(africa|south africa|nigeria|kenya|egypt|ghana)\b/.test(normalized)) regions.push('africa');
+  return regions;
+}
+
+function regionFor(value) {
+  return regionsFor(value)[0];
 }
 
 function isGlobalLocation(value) {
@@ -51,40 +58,88 @@ function jobText(job) {
   ].map(text).join(' ').toLowerCase();
 }
 
+function roleFamily(value) {
+  const s = String(value || '').toLowerCase();
+  if (/\b(customer support|customer service|technical support|support engineer|help desk|helpdesk|service desk)\b/.test(s)) return 'support';
+  if (/\b(devops|site reliability|sre|platform engineer|cloud engineer|infrastructure engineer|systems engineer)\b/.test(s)) return 'devops';
+  if (/\b(data scientist|machine learning scientist|research scientist|applied scientist)\b/.test(s)) return 'data-science';
+  if (/\b(data engineer|analytics engineer|data platform engineer)\b/.test(s)) return 'data-engineering';
+  if (/\b(data analyst|business intelligence|bi analyst|reporting analyst)\b/.test(s)) return 'data-analytics';
+  if (/\b(machine learning|ml engineer|ai engineer|artificial intelligence|llm engineer|deep learning|computer vision)\b/.test(s)) return 'ai-ml';
+  if (/\b(qa|quality assurance|test automation|automation tester|software tester|test engineer)\b/.test(s)) return 'qa-testing';
+  if (/\b(product manager|product owner|product management)\b/.test(s)) return 'product';
+  if (/\b(project manager|program manager|project coordinator|scrum master)\b/.test(s)) return 'project-program';
+  if (/\b(ux designer|ui designer|product designer|graphic designer|visual designer)\b/.test(s)) return 'design';
+  if (/\b(marketing|seo|content writer|copywriter|growth marketer|social media)\b/.test(s)) return 'marketing';
+  if (/\b(sales|account executive|business development|sales development|account manager)\b/.test(s)) return 'sales';
+  if (/\b(recruiter|talent acquisition|human resources|hr manager|people operations)\b/.test(s)) return 'human-resources';
+  if (/\b(accountant|accounting|financial analyst|finance manager|bookkeeper|payroll)\b/.test(s)) return 'finance';
+  if (/\b(backend|back end|frontend|front end|full stack|fullstack|software|developer|programmer|web engineer|web developer|application engineer|mobile developer|ios developer|android developer|firmware engineer|embedded engineer)\b/.test(s)) return 'software-engineering';
+  return undefined;
+}
+
 function matchesQuery(job, query) {
-  const queryTokens = tokens(query).filter((term) => !['the', 'and', 'for', 'with', 'senior', 'junior', 'lead', 'staff', 'principal', 'remote', 'full', 'time', 'developer', 'engineer', 'software'].includes(term));
-  const candidates = queryTokens.length > 0 ? queryTokens : tokens(query);
-  const searchable = jobText(job);
-  return candidates.length === 0 || candidates.some((term) => searchable.includes(term));
+  const title = text(job.position || job.title || job.jobTitle || job.job_title);
+  if (!title) return false;
+  const titleAndTags = [title, job.tags, job.category, job.categories, job.parentCategories].map(text).join(' ').toLowerCase();
+  const targetFamily = roleFamily(query);
+  const listingFamily = roleFamily(title);
+  if (targetFamily && listingFamily && targetFamily !== listingFamily) return false;
+
+  const stop = new Set(['the', 'and', 'for', 'with', 'senior', 'junior', 'staff', 'principal', 'lead', 'head', 'director', 'manager', 'associate', 'mid', 'level', 'remote', 'full', 'time', 'developer', 'engineer', 'software', 'programmer', 'web', 'specialist', 'analyst', 'scientist']);
+  const core = [...new Set(tokens(query).filter((term) => !stop.has(term)))];
+  if (core.length) {
+    const matched = core.filter((term) => {
+      const aliases = term === 'backend' ? ['backend', 'back end', 'back-end', 'server side', 'api']
+        : term === 'frontend' ? ['frontend', 'front end', 'front-end']
+        : term === 'react' ? ['react', 'reactjs', 'react.js']
+        : term === 'node' ? ['node', 'node.js', 'nodejs']
+        : [term];
+      return aliases.some((alias) => titleAndTags.includes(alias));
+    });
+    return matched.length >= (core.length > 2 ? Math.ceil(core.length * 0.5) : 1);
+  }
+  if (targetFamily) return listingFamily === targetFamily;
+  return tokens(query).some((term) => titleAndTags.includes(term));
 }
 
 function matchesLocation(job, requested) {
   const location = String(requested || '').trim();
-  if (!location || /^(remote|worldwide|global|anywhere|all locations|all countries)$/i.test(location)) return true;
+  if (!location) return false;
+  if (/^(remote|worldwide|global|anywhere|all locations|all countries)$/i.test(location)) return true;
 
-  const structuredLocation = [job.location, job.location_country, job.region].map(text).join(' ').trim();
+  const structuredLocation = [job.location, job.location_country, job.region, job.locationRestrictions].map(text).join(' ').trim();
   if (isGlobalLocation(structuredLocation)) return true;
 
-  const requestedTerms = tokens(location);
-  const structuredLower = structuredLocation.toLowerCase();
-  if (requestedTerms.some((term) => structuredLower.includes(term))) return true;
+  const requestedNormalized = normalizeLocation(location);
+  const actualNormalized = normalizeLocation(structuredLocation);
+  if (actualNormalized && actualNormalized.includes(requestedNormalized)) return true;
 
-  const requestedRegion = regionFor(location);
-  const listedRegion = regionFor(structuredLocation);
-  if (requestedRegion && listedRegion) return requestedRegion === listedRegion;
-  if (structuredLocation) return false;
+  const requestedRegions = regionsFor(location);
+  const listedRegions = regionsFor(structuredLocation);
+  if (requestedRegions.length && listedRegions.length) return requestedRegions.some((region) => listedRegions.includes(region));
+
+  if (structuredLocation) {
+    const requestedTerms = tokens(location).filter((term) => term.length > 2);
+    const actualTerms = new Set(tokens(structuredLocation));
+    if (requestedTerms.some((term) => actualTerms.has(term))) return true;
+    return false;
+  }
 
   const description = text(job.description);
   if (isGlobalLocation(description)) return true;
   const restriction = description.match(/(?:based in|based out of|located in|must be (?:located|based|resident) in|residing in|residing within|candidates? (?:must|should) be (?:located|based) in|only available in|available only in|position is restricted to)\s+([^.<\n]{2,70})/i);
-  const restrictedRegion = restriction ? regionFor(restriction[1]) : undefined;
-  if (requestedRegion && restrictedRegion) return requestedRegion === restrictedRegion;
-  if (requestedRegion && /\b(latin america|latam|south america|central america|north america|europe|apac|asia|united states|usa|canada|india|australia|united kingdom|uk)\b/i.test(description)) {
-    const mentionedRegion = regionFor(description);
-    if (mentionedRegion && mentionedRegion !== requestedRegion) return false;
+  if (restriction) {
+    const allowedRegions = regionsFor(restriction[1]);
+    if (requestedRegions.length && allowedRegions.length) return requestedRegions.some((region) => allowedRegions.includes(region));
+    const allowed = normalizeLocation(restriction[1]);
+    return allowed.includes(requestedNormalized) || requestedNormalized.includes(allowed);
   }
+  return false;
+}
 
-  return true;
+function normalizeLocation(value) {
+  return String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
 async function getJobs() {
@@ -217,4 +272,4 @@ function start() {
 
 if (require.main === module) start();
 
-module.exports = { matchesLocation, matchesQuery, regionFor };
+module.exports = { matchesLocation, matchesQuery, regionFor, regionsFor, roleFamily };
