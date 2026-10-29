@@ -1,13 +1,7 @@
 name: Live job source check
 
 on:
-  push:
-    branches: [development]
-    paths:
-      - .github/workflows/live-source-check.yml
   workflow_dispatch:
-  schedule:
-    - cron: '13 4 * * *'
 
 permissions:
   contents: read
