@@ -5,11 +5,11 @@ const TITLE_KEYS = ['title', 'jobTitle', 'job_title', 'position', 'role', 'name'
 const COMPANY_KEYS = ['company', 'companyName', 'company_name', 'employer', 'organization', 'organisation'];
 const URL_KEYS = ['applicationUrl', 'application_url', 'applyUrl', 'apply_url', 'applyLink', 'apply_link', 'careerUrl', 'career_url', 'jobUrl', 'job_url', 'url', 'link', 'externalUrl'];
 const ID_KEYS = ['id', 'jobId', 'job_id', 'externalId', 'external_id', 'job_uuid'];
-const LOCATION_KEYS = ['location', 'jobLocation', 'job_location', 'city', 'locations', 'address', 'region'];
+const LOCATION_KEYS = ['location', 'jobLocation', 'job_location', 'jobGeo', 'job_geo', 'city', 'locations', 'address', 'region'];
 const DESCRIPTION_KEYS = ['description', 'jobDescription', 'job_description', 'summary', 'details', 'snippet'];
 const SALARY_MIN_KEYS = ['salaryMin', 'salary_min', 'minSalary', 'min_salary', 'salary_from', 'minimumSalary'];
 const SALARY_MAX_KEYS = ['salaryMax', 'salary_max', 'maxSalary', 'max_salary', 'salary_to', 'maximumSalary'];
-const POSTED_KEYS = ['postedAt', 'posted_at', 'datePosted', 'date_posted', 'createdAt', 'created_at', 'publishedAt'];
+const POSTED_KEYS = ['postedAt', 'posted_at', 'datePosted', 'date_posted', 'createdAt', 'created_at', 'publishedAt', 'pubDate', 'pub_date'];
 
 export function parseMcpJobResult(result: unknown): unknown[] {
   if (!result || typeof result !== 'object') return [];
