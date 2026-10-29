@@ -229,7 +229,7 @@ async function discover(args,limit) {
     }
     if(candidateMap.size>=target*1.2)break;
   }
-  const candidates=[...candidateMap.values()],maxFetch=Math.min(envInt('BRAVE_SEARCH_MAX_PAGE_FETCHES',250,0,500),candidates.length);
+  const candidates=[...candidateMap.values()],maxFetch=Math.min(envInt('SERPER_SEARCH_MAX_PAGE_FETCHES',250,0,500),candidates.length);
   const crawled=await concurrent(candidates.slice(0,maxFetch),envInt('SERPER_SEARCH_PAGE_CRAWL_CONCURRENCY',20,1,20),async c=>({candidate:c,page:await crawl(c.url)}));
   const unique=new Map();let structured=0,metadata=0;
   for(const item of crawled){if(!item)continue;
