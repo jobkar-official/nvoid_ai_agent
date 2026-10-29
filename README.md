@@ -12,7 +12,7 @@ The default runtime configuration enables seven live public job sources: Jobicy,
 
 The optional **Brave Search Engine and Public Job Page Crawler** builds dork-style queries from the candidate's role, location, skills and keywords. Query families cover company career pages and ATS/job boards including Greenhouse, Lever, Ashby, Workday, SmartRecruiters, LinkedIn Jobs, Naukri, Indeed, Foundit, Apna and Wellfound. It deduplicates indexed URLs, fetches a bounded number of public job pages, extracts schema.org `JobPosting` JSON-LD where available, and applies role/location filters. It does not log into sites or bypass CAPTCHA/access controls.
 
-Enable Greenhouse, Lever or Ashby board crawling by setting comma-separated company board slugs in `GREENHOUSE_BOARDS`, `LEVER_SITES` or `ASHBY_BOARDS`. These connectors scan only the boards configured by you. Enable web-index discovery by setting `BRAVE_SEARCH_API_KEY` in the worker `.env` and restarting; it auto-enables in the default config. Its target is up to 500 records per profile, and `searchReport` gives request counts, crawled pages, structured-data hits and whether the requested count was reached. **500 is a target, not a guarantee**: if the web index has fewer suitable results for the profile, the agent reports the actual count instead of inventing jobs. Search API use may incur charges.
+Enable Greenhouse, Lever or Ashby board crawling by setting comma-separated company board slugs in `GREENHOUSE_BOARDS`, `LEVER_SITES` or `ASHBY_BOARDS`. These connectors scan only the boards configured by you. Enable web-index discovery by setting `BRAVE_SEARCH_API_KEY` in the worker `.env` and restarting; it auto-enables in the default config. Its target is up to 1,000 records per profile, and `searchReport` gives request counts, crawled pages, structured-data hits and whether the requested count was reached. **1,000 is a target, not a guarantee**: if the web index has fewer suitable results for the profile, the agent reports the actual count instead of inventing jobs. Search API use may incur charges.
 
 Exact city eligibility depends on indexed snippets and job-page metadata. Remote pages without location eligibility evidence are not considered eligible for a specific city.
 
@@ -113,23 +113,23 @@ npm run smoke:test -- --workflow
 
 This mode queues only eligible jobs from the selected sources with `autoSubmit: false`, then prints recent task states. A queued task is not proof that an application was submitted. Public aggregators that only supply a listing URL are not treated as direct application forms.
 
-### Enable search-engine crawling and 500-result target
+### Enable search-engine crawling and up-to-1,000-result target
 
 Add a Brave Search API key to the worker's existing `.env` without overwriting other values, then restart the worker:
 
 ```dotenv
 BRAVE_SEARCH_API_KEY=your-private-brave-search-api-key
-BRAVE_SEARCH_MAX_RESULTS=500
+BRAVE_SEARCH_MAX_RESULTS=1000
 BRAVE_SEARCH_MAX_QUERIES=18
 BRAVE_SEARCH_MAX_PAGES_PER_QUERY=10
 BRAVE_SEARCH_MAX_REQUESTS=120
 BRAVE_SEARCH_MAX_PAGE_FETCHES=250
 BRAVE_SEARCH_CONCURRENCY=10
 BRAVE_SEARCH_PAGE_CRAWL_CONCURRENCY=20
-MAX_SEARCH_RESULTS=500
+MAX_SEARCH_RESULTS=1000
 ```
 
-`POST /api/jobs/search` defaults to 500 and permits configured limits up to 1,000. The web index returns bounded pages per request, so this crawler fans out over multiple role/location queries. More requests can improve recall, at higher API usage and runtime. Read `searchReport` to see the actual count and whether the requested target was reached.
+`POST /api/jobs/search` defaults to 1,000 and permits configured limits up to 1,000. The web index returns bounded pages per request, so this crawler fans out over multiple role/location queries. More requests can improve recall, at higher API usage and runtime. Read `searchReport` to see the actual count and whether the requested target was reached.
 
 ### Run the automated checks
 
