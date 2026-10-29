@@ -197,7 +197,7 @@ async function discover(args,limit) {
   const role=String(args.query||'').trim(),location=String(args.location||(args.countries||[]).join(', ')||'').trim();
   if(!role||!location)throw new Error('Both target job title and preferred location are required.');
   if(!process.env.BRAVE_SEARCH_API_KEY||String(process.env.BRAVE_SEARCH_API_KEY).includes('$'+'{'))throw new Error('Brave Search is disabled. Set BRAVE_SEARCH_API_KEY and restart the worker.');
-  const target=Math.min(envInt('BRAVE_SEARCH_MAX_RESULTS',500,50,1000),limit),queries=buildSearchQueries({query:role,location,skills:args.skills,keywords:args.keywords}),pageCap=envInt('BRAVE_SEARCH_MAX_PAGES_PER_QUERY',10,1,10),requestCap=envInt('BRAVE_SEARCH_MAX_REQUESTS',120,1,120);
+  const target=Math.min(envInt('BRAVE_SEARCH_MAX_RESULTS',1000,50,1000),limit),queries=buildSearchQueries({query:role,location,skills:args.skills,keywords:args.keywords}),pageCap=envInt('BRAVE_SEARCH_MAX_PAGES_PER_QUERY',10,1,10),requestCap=envInt('BRAVE_SEARCH_MAX_REQUESTS',120,1,120);
   const candidateMap=new Map();let calls=0,indexed=0,failures=0,more=false;
   for(let offset=0;offset<pageCap&&calls<requestCap;offset++){
     const tasks=queries.slice(0,Math.min(queries.length,requestCap-calls)).map(q=>({q,offset}));
@@ -227,7 +227,7 @@ async function search(args) {
   const key=JSON.stringify({role,loc,skills:args.skills||[],keywords:args.keywords||[],countries:args.countries||[]}),hit=cache.get(key);
   if(hit&&hit.expires>Date.now())return{...hit.value,jobs:hit.value.jobs.slice(0,limit),report:{...hit.value.report,targetCount:limit,returnedJobs:Math.min(limit,hit.value.jobs.length),reachedRequestedLimit:hit.value.jobs.length>=limit}};
   if(pending.has(key)){const value=await pending.get(key);return{...value,jobs:value.jobs.slice(0,limit)};}
-  const work=discover(args,Math.min(limit,envInt('BRAVE_SEARCH_MAX_RESULTS',500,50,1000)));pending.set(key,work);
+  const work=discover(args,Math.min(limit,envInt('BRAVE_SEARCH_MAX_RESULTS',1000,50,1000)));pending.set(key,work);
   try{const value=await work;cache.set(key,{value,expires:Date.now()+15*60*1000});if(cache.size>60)cache.delete(cache.keys().next().value);return value;}finally{pending.delete(key);}
 }
 const tools=[{name:'search_jobs',description:'Search role/location-specific indexed public job pages and careers/ATS boards; extracts schema.org JobPosting data where available.',inputSchema:{type:'object',properties:{query:{type:'string'},location:{type:'string'},countries:{type:'array',items:{type:'string'}},skills:{type:'array',items:{type:'string'}},keywords:{type:'array',items:{type:'string'}},remote:{type:'boolean'},experienceYears:{type:'number'},limit:{type:'integer',minimum:1,maximum:1000}},required:['query','location']}}];
