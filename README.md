@@ -6,15 +6,15 @@ This is a separate worker service. Keep your existing Next.js frontend and Sprin
 
 ## Live source coverage and integration boundaries
 
-The default runtime configuration enables five live public job sources:
+The default runtime configuration enables five live public job sources: Jobicy, Remote OK, Arbeitnow, Working Nomads and Himalayas. These feeds/APIs are filtered by role family and location eligibility.
 
-- **Jobicy MCP** — current remote listings, queried by target role and supported geography.
-- **Remote OK** — live public remote-job feed, filtered locally by role and location.
-- **Arbeitnow** — public job-board feed, useful for local and remote opportunities, with stronger European coverage.
-- **Working Nomads** — public remote-job feed.
-- **Himalayas** — public remote-job API with location restrictions and canonical job URLs.
+### Search-engine discovery and public-page crawling
 
-The adapters preserve source URLs, use bounded caches (5–60 minutes by provider), and filter by role family, target keywords/skills, and available country/location eligibility before results reach the UI. For a specific city, a job that only says “remote” without location eligibility is rejected; explicitly worldwide listings and broad provider regions are accepted only when their metadata supports it. Exact matching still depends on what each provider publishes.
+The optional **Brave Search Engine and Public Job Page Crawler** builds dork-style queries from the candidate's role, location, skills and keywords. Query families cover company career pages and ATS/job boards including Greenhouse, Lever, Ashby, Workday, SmartRecruiters, LinkedIn Jobs, Naukri, Indeed, Foundit, Apna and Wellfound. It deduplicates indexed URLs, fetches a bounded number of public job pages, extracts schema.org `JobPosting` JSON-LD where available, and applies role/location filters. It does not log into sites or bypass CAPTCHA/access controls.
+
+Enable it by setting `BRAVE_SEARCH_API_KEY` in the worker `.env` and restarting; it auto-enables in the default config. Its target is up to 500 records per profile, and `searchReport` gives request counts, crawled pages, structured-data hits and whether the requested count was reached. **500 is a target, not a guarantee**: if the web index has fewer suitable results for the profile, the agent reports the actual count instead of inventing jobs. Search API use may incur charges.
+
+Exact city eligibility depends on indexed snippets and job-page metadata. Remote pages without location eligibility evidence are not considered eligible for a specific city.
 
 ### Optional popular job-board connectors
 
@@ -52,7 +52,7 @@ The synthetic demo MCP source is disabled in `config/mcp-servers.json` and isola
 
 ## Local development
 
-Use Node.js 22+, Redis 7+, and Chromium for browser workflows. The default `config/mcp-servers.json` enables the five public sources above. Optional Adzuna, Jooble, and Apify sources activate automatically when their credentials are present. Do not set `MCP_SERVERS_CONFIG` to the CI-only test config when you expect live results. Keep `AUTO_SUBMIT_ENABLED=false` while testing.
+Use Node.js 22+, Redis 7+, and Chromium for browser workflows. The default config enables the five public feed sources above. The search-engine crawler auto-enables when `BRAVE_SEARCH_API_KEY` is present. Optional Adzuna, Jooble, and Apify sources activate automatically when their credentials are present. Do not set `MCP_SERVERS_CONFIG` to the CI-only test config when you expect live results. Keep `AUTO_SUBMIT_ENABLED=false` while testing.
 
 Create `.env` only if it does not already exist, then set a private `AGENT_API_KEY`:
 
@@ -112,6 +112,24 @@ npm run smoke:test -- --workflow
 ```
 
 This mode queues only eligible jobs from the selected sources with `autoSubmit: false`, then prints recent task states. A queued task is not proof that an application was submitted. Public aggregators that only supply a listing URL are not treated as direct application forms.
+
+### Enable search-engine crawling and 500-result target
+
+Add a Brave Search API key to the worker's existing `.env` without overwriting other values, then restart the worker:
+
+```dotenv
+BRAVE_SEARCH_API_KEY=your-private-brave-search-api-key
+BRAVE_SEARCH_MAX_RESULTS=500
+BRAVE_SEARCH_MAX_QUERIES=15
+BRAVE_SEARCH_MAX_PAGES_PER_QUERY=10
+BRAVE_SEARCH_MAX_REQUESTS=60
+BRAVE_SEARCH_MAX_PAGE_FETCHES=120
+BRAVE_SEARCH_CONCURRENCY=6
+BRAVE_SEARCH_PAGE_CRAWL_CONCURRENCY=12
+MAX_SEARCH_RESULTS=500
+```
+
+`POST /api/jobs/search` defaults to 500 and permits configured limits up to 1,000. The web index returns bounded pages per request, so this crawler fans out over multiple role/location queries. More requests can improve recall, at higher API usage and runtime. Read `searchReport` to see the actual count and whether the requested target was reached.
 
 ### Run the automated checks
 
