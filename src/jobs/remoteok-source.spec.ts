@@ -26,6 +26,11 @@ describe('Remote OK live source filters', () => {
     }, 'Bengaluru')).toBe(true);
 
     expect(remoteOkFilters.matchesLocation({
+      location: 'Australia',
+      position: 'Software Engineer'
+    }, 'Bengaluru')).toBe(false);
+
+    expect(remoteOkFilters.matchesLocation({
       location: '',
       position: 'Senior Software Engineer',
       description: 'Remote role based in Latin America.'
