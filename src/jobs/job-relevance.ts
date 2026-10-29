@@ -209,6 +209,9 @@ function matchesOneLocation(job: NormalizedJob, target: string): boolean {
     return targetRegions.some((region) => jobRegions.includes(region));
   }
 
+  const description = String(job.description ?? job.raw?.description ?? job.raw?.excerpt ?? '');
+  if (isExplicitGlobalEligibility(description)) return true;
+
   if (structuredNormalized) {
     const wanted = tokens(target).filter((term) => term.length > 2);
     const offered = new Set(tokens(structured));
@@ -216,8 +219,6 @@ function matchesOneLocation(job: NormalizedJob, target: string): boolean {
     return false;
   }
 
-  const description = String(job.description ?? job.raw?.description ?? job.raw?.excerpt ?? '');
-  if (isExplicitGlobalEligibility(description)) return true;
   const restriction = description.match(/(?:based in|based out of|located in|must be (?:located|based|resident) in|residing in|residing within|candidates? (?:must|should) be (?:located|based) in|only available in|available only in|position is restricted to)\s+([^.<\n]{2,70})/i);
   if (restriction) {
     const allowed = normalize(restriction[1]);
