@@ -117,6 +117,60 @@ function regionsFor(value) {
   return checks.filter(([, pattern]) => pattern.test(s)).map(([region]) => region);
 }
 
+function countriesFor(value) {
+  const s = normalize(value);
+  const checks = [
+    ['india', /\b(india|bengaluru|bangalore|delhi|delhi ncr|mumbai|hyderabad|chennai|pune|kolkata|noida|gurugram|gurgaon)\b/],
+    ['australia', /\b(australia|sydney|melbourne|perth|brisbane|adelaide)\b/],
+    ['new-zealand', /\b(new zealand|auckland|wellington)\b/],
+    ['singapore', /\bsingapore\b/],
+    ['japan', /\b(japan|tokyo|osaka)\b/],
+    ['philippines', /\b(philippines|manila)\b/],
+    ['pakistan', /\b(pakistan|karachi|lahore|islamabad)\b/],
+    ['nepal', /\bnepal\b/],
+    ['sri-lanka', /\b(sri lanka|colombo)\b/],
+    ['indonesia', /\b(indonesia|jakarta)\b/],
+    ['thailand', /\bthailand\b/],
+    ['vietnam', /\bvietnam\b/],
+    ['malaysia', /\bmalaysia\b/],
+    ['hong-kong', /\bhong kong\b/],
+    ['united-kingdom', /\b(united kingdom|uk|england|scotland|wales|london|manchester|birmingham)\b/],
+    ['germany', /\b(germany|berlin|munich|frankfurt|hamburg)\b/],
+    ['france', /\b(france|paris|lyon)\b/],
+    ['netherlands', /\b(netherlands|amsterdam|rotterdam|utrecht)\b/],
+    ['ireland', /\b(ireland|dublin|cork)\b/],
+    ['spain', /\b(spain|madrid|barcelona)\b/],
+    ['italy', /\b(italy|rome|milan)\b/],
+    ['poland', /\b(poland|warsaw|krakow)\b/],
+    ['sweden', /\bsweden\b/],
+    ['norway', /\bnorway\b/],
+    ['finland', /\bfinland\b/],
+    ['portugal', /\b(portugal|lisbon)\b/],
+    ['switzerland', /\b(switzerland|zurich|geneva)\b/],
+    ['austria', /\baustria\b/],
+    ['belgium', /\bbelgium\b/],
+    ['denmark', /\bdenmark\b/],
+    ['united-states', /\b(united states|usa|new york|san francisco|california|texas|seattle|austin|chicago|boston|los angeles)\b/],
+    ['canada', /\b(canada|toronto|vancouver|montreal|calgary|ottawa|edmonton)\b/],
+    ['brazil', /\b(brazil|sao paulo|rio de janeiro)\b/],
+    ['mexico', /\bmexico\b/],
+    ['argentina', /\bargentina\b/],
+    ['colombia', /\bcolombia\b/],
+    ['chile', /\bchile\b/],
+    ['south-africa', /\b(south africa|johannesburg|cape town)\b/],
+    ['nigeria', /\bnigeria\b/],
+    ['kenya', /\bkenya\b/],
+    ['egypt', /\begypt\b/],
+    ['united-arab-emirates', /\b(united arab emirates|uae|dubai|abu dhabi)\b/],
+    ['saudi-arabia', /\b(saudi arabia|riyadh|jeddah)\b/],
+  ];
+  return checks.filter(([, pattern]) => pattern.test(s)).map(([country]) => country);
+}
+
+function isExplicitGlobalEligibility(value) {
+  return /\b(available worldwide|worldwide eligible|work from anywhere|remote from anywhere|remote worldwide|anywhere in the world|open to candidates worldwide|eligible in all countries|remote from any location)\b/i.test(String(value || ''));
+}
+
 function isGlobal(value) {
   return /\b(worldwide|anywhere|global|all countries|work from anywhere|remote worldwide|world wide)\b/i.test(text(value));
 }
@@ -134,6 +188,11 @@ function matchesLocation(job, requested, remoteOnly) {
   const targetNormalized = normalize(target);
   const structuredNormalized = normalize(structured);
   if (structuredNormalized.includes(targetNormalized)) return true;
+  const targetCountries = countriesFor(target);
+  const listingCountries = countriesFor(structured);
+  if (targetCountries.length && listingCountries.length) {
+    return targetCountries.some((country) => listingCountries.includes(country));
+  }
   const targetRegions = regionsFor(target);
   const listingRegions = regionsFor(structured);
   if (targetRegions.length && listingRegions.length) return targetRegions.some((region) => listingRegions.includes(region));
@@ -145,7 +204,7 @@ function matchesLocation(job, requested, remoteOnly) {
   }
 
   const description = text(job.description);
-  if (isGlobal(description)) return true;
+  if (isExplicitGlobalEligibility(description)) return true;
   const restriction = description.match(/(?:based in|based out of|located in|must be (?:located|based|resident) in|residing in|residing within|candidates? (?:must|should) be (?:located|based) in|only available in|available only in|position is restricted to)\s+([^.<\n]{2,70})/i);
   if (restriction) {
     const targetRegion = targetRegions[0];
@@ -382,4 +441,4 @@ function start() {
 }
 
 if (require.main === module) start();
-module.exports = { matchesRole, matchesLocation, roleFamily, regionsFor, mapItem, countryFor };
+module.exports = { matchesRole, matchesLocation, roleFamily, regionsFor, countriesFor, mapItem, countryFor };
