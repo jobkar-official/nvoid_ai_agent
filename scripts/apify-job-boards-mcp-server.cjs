@@ -170,6 +170,15 @@ function countriesFor(value) {
 function isExplicitGlobalEligibility(value) {
   return /\b(available worldwide|worldwide eligible|work from anywhere|remote from anywhere|remote worldwide|anywhere in the world|open to candidates worldwide|eligible in all countries|remote from any location)\b/i.test(String(value || ''));
 }
+function displayLocation(item) {
+  const primary = text(item.location || item.city || item.job_location);
+  const restriction = text(item.locationRestrictions || item.location_restrictions || item.allowedCountries || item.allowed_countries || item.eligibleLocations || item.eligible_locations || item.country || item.country_name || item.countryIndeed);
+  if (primary && !/^(remote|remote only|remote eligible|remote · eligibility not stated)$/i.test(primary)) return primary;
+  if (restriction) return primary ? primary + ' · ' + restriction : restriction;
+  if (isExplicitGlobalEligibility(item.description || item.snippet || item.excerpt)) return 'Worldwide';
+  return primary;
+}
+
 
 function isGlobal(value) {
   return /\b(worldwide|anywhere|global|all countries|work from anywhere|remote worldwide|world wide)\b/i.test(text(value));
@@ -366,7 +375,7 @@ function mapItem(item) {
     source: site,
     title: text(item.title || item.jobTitle || item.job_title || item.position),
     company: text(item.company || item.employer || item.companyName || item.company_name),
-    location: text(item.location || item.city || item.job_location || item.locationRestrictions || item.location_restrictions),
+    location: displayLocation(item),
     country: text(item.country || item.country_name || item.countryIndeed),
     description: text(item.description || item.snippet || item.excerpt),
     tags: Array.isArray(item.skills) ? item.skills.join(', ') : text(item.skills || item.tags || item.job_function || item.category),
@@ -463,4 +472,4 @@ function start() {
 }
 
 if (require.main === module) start();
-module.exports = { matchesRole, matchesLocation, roleFamily, regionsFor, countriesFor, mapItem, countryFor };
+module.exports = { matchesRole, matchesLocation, roleFamily, regionsFor, countriesFor, mapItem, countryFor, displayLocation };
