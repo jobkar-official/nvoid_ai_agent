@@ -18,6 +18,30 @@
     }
   },
   {
+    "id": "remoteok",
+    "name": "Remote OK Live Remote Jobs",
+    "enabled": true,
+    "transport": "stdio",
+    "command": "node",
+    "args": [
+      "./scripts/remoteok-mcp-server.cjs"
+    ],
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        }
+      }
+    }
+  },
+  {
     "id": "demo",
     "name": "Nvoid Local Demo Jobs (synthetic data)",
     "enabled": false,
