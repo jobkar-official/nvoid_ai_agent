@@ -377,5 +377,81 @@
         }
       }
     }
+  },
+  {
+    "id": "apify-boards",
+    "name": "Apify Job Boards — Naukri, LinkedIn, Indeed, Glassdoor",
+    "enabled": false,
+    "transport": "stdio",
+    "command": "node",
+    "args": [
+      "./scripts/apify-job-boards-mcp-server.cjs",
+      "boards"
+    ],
+    "env": {
+      "APIFY_API_TOKEN": "${APIFY_API_TOKEN}",
+      "APIFY_JOB_BOARDS_SITES": "${APIFY_JOB_BOARDS_SITES}",
+      "APIFY_JOB_MAX_AGE_HOURS": "${APIFY_JOB_MAX_AGE_HOURS}"
+    },
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        },
+        "remoteOnly": {
+          "$profile": "remote"
+        },
+        "skills": {
+          "$profile": "skills"
+        },
+        "keywords": {
+          "$profile": "keywords"
+        }
+      }
+    }
+  },
+  {
+    "id": "apify-apna",
+    "name": "Apify Apna Public Jobs",
+    "enabled": false,
+    "transport": "stdio",
+    "command": "node",
+    "args": [
+      "./scripts/apify-job-boards-mcp-server.cjs",
+      "apna"
+    ],
+    "env": {
+      "APIFY_API_TOKEN": "${APIFY_API_TOKEN}"
+    },
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        },
+        "remoteOnly": {
+          "$profile": "remote"
+        },
+        "skills": {
+          "$profile": "skills"
+        },
+        "keywords": {
+          "$profile": "keywords"
+        }
+      }
+    }
   }
 ]
