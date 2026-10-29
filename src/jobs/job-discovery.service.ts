@@ -19,6 +19,7 @@ export interface SearchResult {
 @Injectable()
 export class JobDiscoveryService {
   private readonly logger = new Logger(JobDiscoveryService.name);
+  private readonly jobicyCache = new Map<string, { expiresAt: number; result: unknown }>();
 
   constructor(
     private readonly mcpRegistry: McpRegistryService,
@@ -52,7 +53,9 @@ export class JobDiscoveryService {
               count: Math.min(200, requestedLimit),
             }
           : args ?? {};
-        const result = await this.mcpRegistry.callTool(entry.server.id, entry.tool, toolArgs);
+        const result = entry.server.id === 'jobicy'
+          ? await this.callJobicyWithCache(entry.server.id, entry.tool, toolArgs)
+          : await this.mcpRegistry.callTool(entry.server.id, entry.tool, toolArgs);
         const rawJobs = parseMcpJobResult(result);
         const jobs = rawJobs
           .map((raw) => normalizeJob(raw, entry.server.id, profile))
@@ -94,6 +97,25 @@ export class JobDiscoveryService {
       sources: sourceResults.map((entry) => ({ serverId: entry.serverId, tool: entry.tool, found: entry.jobs.length, error: entry.error })),
       backendSync,
     };
+  }
+
+  private async callJobicyWithCache(serverId: string, tool: string, args: Record<string, unknown>): Promise<unknown> {
+    const cacheKey = JSON.stringify({ serverId, tool, args });
+    const now = Date.now();
+    const cached = this.jobicyCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) return cached.result;
+    if (cached) this.jobicyCache.delete(cacheKey);
+
+    const result = await this.mcpRegistry.callTool(serverId, tool, args);
+    for (const [key, value] of this.jobicyCache) {
+      if (value.expiresAt <= now) this.jobicyCache.delete(key);
+    }
+    if (this.jobicyCache.size >= 200) {
+      const oldestKey = this.jobicyCache.keys().next().value;
+      if (oldestKey) this.jobicyCache.delete(oldestKey);
+    }
+    this.jobicyCache.set(cacheKey, { expiresAt: now + 60 * 60 * 1000, result });
+    return result;
   }
 }
 
