@@ -127,9 +127,9 @@ function inferArguments(schemaValue: unknown, profile: JobProfile, limit: number
   return missing.length > 0 ? undefined : result;
 }
 
-function resolveJobicyGeo(profile: JobProfile): string {
+export function resolveJobicyGeo(profile: JobProfile): string {
   const location = (profile.location ?? '').trim().toLowerCase();
-  if (!location || /^(remote|worldwide|global|anywhere|all locations|all countries)$/.test(location)) return 'anywhere';
+  if (!location || /\b(remote|worldwide|global|anywhere|all locations|all countries)\b/.test(location)) return 'anywhere';
   const region = regionForJobicyLocation(location);
   if (region) return region;
   const preferredRegions = [...new Set((profile.countries ?? []).map((country) => regionForJobicyLocation(country.toLowerCase())).filter((value): value is string => Boolean(value)))];
