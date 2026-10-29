@@ -2,12 +2,12 @@ FROM node:22-bookworm
 
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install --no-audit --no-fund
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
 RUN npx playwright install --with-deps chromium
 
 COPY . .
-RUN npm run build
+RUN npm run build && npm prune --omit=dev --no-audit --no-fund
 
 ENV NODE_ENV=production
 EXPOSE 3100
