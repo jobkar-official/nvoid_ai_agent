@@ -26,6 +26,11 @@ describe('Apify multi-board job source', () => {
 
     expect(apifyBoards.matchesLocation({
       title: 'Backend Developer',
+      location: 'Australia',
+    }, 'Bengaluru', false)).toBe(false);
+
+    expect(apifyBoards.matchesLocation({
+      title: 'Backend Developer',
       location: 'United States',
     }, 'Bengaluru', false)).toBe(false);
 
