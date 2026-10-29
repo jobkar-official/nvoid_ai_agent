@@ -2,7 +2,7 @@
 const readline = require('node:readline');
 const cache = new Map();
 const pending = new Map();
-const SOURCE = 'brave-search';
+const SOURCE = 'serper-search';
 
 function envInt(name, fallback, min, max) {
   const raw = String(process.env[name] || '').trim();
@@ -105,7 +105,7 @@ function buildSearchQueries(profile) {
     'site:apna.co/job '+rq+suffix,'site:wellfound.com/jobs '+rq+suffix,
     'site:jobs.workable.com '+rq+suffix,'site:jobs.jobvite.com '+rq+suffix,'site:jobs.icims.com '+rq+suffix];
   if(skills.length)q.push(rq+' '+skills.map(quote).join(' ')+suffix+' career openings');
-  return [...new Set(q.map(x=>x.replace(/\s+/g,' ').trim()))].slice(0,envInt('BRAVE_SEARCH_MAX_QUERIES',18,1,18));
+  return [...new Set(q.map(x=>x.replace(/\s+/g,' ').trim()))].slice(0,envInt('SERPER_SEARCH_MAX_QUERIES',18,1,18));
 }
 function safeUrl(raw) {
   try {
@@ -167,13 +167,34 @@ function candidateFromResult(r,role,location,q) {
   if(!matchesRole(title,[desc,...extra].join(' '),role))return undefined;
   return{url:u.href,title,description:desc,extra,domain:clean(r.profile?.long_name||r.profile?.name||u.hostname),company:clean(r.profile?.name||''),age:clean(r.page_age||''),query:q,location};
 }
-async function searchPage(q,offset,cc) {
-  const key=String(process.env.BRAVE_SEARCH_API_KEY||'').trim();
-  if(!key||key.includes('$'+'{'))throw new Error('Set BRAVE_SEARCH_API_KEY in the worker .env to enable search-engine discovery.');
-  const params=new URLSearchParams({q,count:'20',offset:String(offset),country:cc,search_lang:'en',safesearch:'moderate'});
-  const res=await fetch('https://api.search.brave.com/res/v1/web/search?'+params,{headers:{accept:'application/json','X-Subscription-Token':key,'User-Agent':'NvoidJobAgent/1.0 (+https://jobkar.in)'},signal:AbortSignal.timeout(10000)});
-  if(!res.ok)throw new Error('Brave Search API returned HTTP '+res.status+'. Check API access, credits and rate limits.');
-  const data=await res.json();return{results:Array.isArray(data.web?.results)?data.web.results:[],more:Boolean(data.query?.more_results_available)};
+function normalizeSearchResponse(data) {
+  const results = Array.isArray(data?.organic) ? data.organic.map((item) => {
+    const rawUrl = String(item?.link || item?.url || '');
+    const url = safeUrl(rawUrl);
+    const domain = clean(item?.domain || url?.hostname || '');
+    return {
+      url: url?.href || rawUrl,
+      title: clean(item?.title || ''),
+      description: clean(item?.snippet || item?.description || ''),
+      snippet: clean(item?.snippet || item?.description || ''),
+      page_age: clean(item?.date || item?.page_age || ''),
+      profile: { name: domain, long_name: domain },
+      extra_snippets: []
+    };
+  }).filter((item) => item.url) : [];
+  return { results, more: results.length >= 10 };
+}
+async function searchPage(q,page,cc) {
+  const key=String(process.env.SERPER_API_KEY||'').trim();
+  if(!key||key.includes('$'+'{'))throw new Error('Set SERPER_API_KEY in the worker .env to enable Google-style job discovery.');
+  const res=await fetch('https://google.serper.dev/search',{
+    method:'POST',
+    headers:{accept:'application/json','content-type':'application/json','X-API-KEY':key,'User-Agent':'NvoidJobAgent/1.0 (+https://jobkar.in)'},
+    body:JSON.stringify({q,gl:String(cc||'IN').toLowerCase(),hl:'en',num:10,page:page+1}),
+    signal:AbortSignal.timeout(15000)
+  });
+  if(!res.ok)throw new Error('Serper Google Search API returned HTTP '+res.status+'. Check SERPER_API_KEY, credits and rate limits.');
+  return normalizeSearchResponse(await res.json());
 }
 async function crawl(rawUrl) {
   let u=safeUrl(rawUrl);if(!u)return undefined;
@@ -196,12 +217,12 @@ function searchCountry(loc){const c=country(loc);return({india:'IN','united stat
 async function discover(args,limit) {
   const role=String(args.query||'').trim(),location=String(args.location||(args.countries||[]).join(', ')||'').trim();
   if(!role||!location)throw new Error('Both target job title and preferred location are required.');
-  if(!process.env.BRAVE_SEARCH_API_KEY||String(process.env.BRAVE_SEARCH_API_KEY).includes('$'+'{'))throw new Error('Brave Search is disabled. Set BRAVE_SEARCH_API_KEY and restart the worker.');
-  const target=Math.min(envInt('BRAVE_SEARCH_MAX_RESULTS',1000,50,1000),limit),queries=buildSearchQueries({query:role,location,skills:args.skills,keywords:args.keywords}),pageCap=envInt('BRAVE_SEARCH_MAX_PAGES_PER_QUERY',10,1,10),requestCap=envInt('BRAVE_SEARCH_MAX_REQUESTS',120,1,120);
+  if(!process.env.SERPER_API_KEY||String(process.env.SERPER_API_KEY).includes('$'+'{'))throw new Error('Serper search is disabled. Set SERPER_API_KEY and restart the worker.');
+  const target=Math.min(envInt('SERPER_SEARCH_MAX_RESULTS',1000,50,1000),limit),queries=buildSearchQueries({query:role,location,skills:args.skills,keywords:args.keywords}),pageCap=envInt('SERPER_SEARCH_MAX_PAGES_PER_QUERY',10,1,10),requestCap=envInt('SERPER_SEARCH_MAX_REQUESTS',80,1,120);
   const candidateMap=new Map();let calls=0,indexed=0,failures=0,more=false;
   for(let offset=0;offset<pageCap&&calls<requestCap;offset++){
     const tasks=queries.slice(0,Math.min(queries.length,requestCap-calls)).map(q=>({q,offset}));
-    const batch=await concurrent(tasks,envInt('BRAVE_SEARCH_CONCURRENCY',10,1,10),async task=>({task,page:await searchPage(task.q,task.offset,searchCountry(location))}));
+    const batch=await concurrent(tasks,envInt('SERPER_SEARCH_CONCURRENCY',10,1,10),async task=>({task,page:await searchPage(task.q,task.offset,searchCountry(location))}));
     calls+=tasks.length;
     for(const item of batch){if(!item?.page){failures++;continue;}indexed+=item.page.results.length;more=more||item.page.more;
       for(const r of item.page.results){const c=candidateFromResult(r,role,location,item.task.q);if(c&&!candidateMap.has(c.url))candidateMap.set(c.url,c);}
@@ -209,7 +230,7 @@ async function discover(args,limit) {
     if(candidateMap.size>=target*1.2)break;
   }
   const candidates=[...candidateMap.values()],maxFetch=Math.min(envInt('BRAVE_SEARCH_MAX_PAGE_FETCHES',250,0,500),candidates.length);
-  const crawled=await concurrent(candidates.slice(0,maxFetch),envInt('BRAVE_SEARCH_PAGE_CRAWL_CONCURRENCY',20,1,20),async c=>({candidate:c,page:await crawl(c.url)}));
+  const crawled=await concurrent(candidates.slice(0,maxFetch),envInt('SERPER_SEARCH_PAGE_CRAWL_CONCURRENCY',20,1,20),async c=>({candidate:c,page:await crawl(c.url)}));
   const unique=new Map();let structured=0,metadata=0;
   for(const item of crawled){if(!item)continue;
     if(item.page?.postings?.length){let accepted=false;
@@ -220,14 +241,14 @@ async function discover(args,limit) {
   }
   for(const c of candidates.slice(maxFetch)){const job=mapResult(c,undefined);if(job&&matchesRole(job.title,job.description,role)&&locationMatch(job.location,job.description,job.url,location)){if(!unique.has(job.url))unique.set(job.url,job);metadata++;}}
   const records=[...unique.values()],jobs=records.slice(0,target);
-  return{jobs,report:{provider:'Brave Search API',mode:'dork-style search-engine discovery and public job-page extraction',queryCount:queries.length,requestsMade:calls,rawIndexedResults:indexed,uniqueRoleLocationUrls:candidates.length,publicJobPagesFetched:crawled.filter(x=>x?.page).length,structuredJobPages:structured,metadataOnlyListings:metadata,matchedJobs:records.length,returnedJobs:jobs.length,targetCount:target,reachedRequestedLimit:jobs.length>=target,moreSearchResultsAvailable:more,failedSearchRequests:failures,truncated:records.length>jobs.length||candidates.length>=target*1.2}};
+  return{jobs,report:{provider:'Serper Google Search API',mode:'dork-style search-engine discovery and public job-page extraction',queryCount:queries.length,requestsMade:calls,rawIndexedResults:indexed,uniqueRoleLocationUrls:candidates.length,publicJobPagesFetched:crawled.filter(x=>x?.page).length,structuredJobPages:structured,metadataOnlyListings:metadata,matchedJobs:records.length,returnedJobs:jobs.length,targetCount:target,reachedRequestedLimit:jobs.length>=target,moreSearchResultsAvailable:more,failedSearchRequests:failures,truncated:records.length>jobs.length||candidates.length>=target*1.2}};
 }
 async function search(args) {
   const role=String(args.query||'').trim(),loc=String(args.location||(args.countries||[]).join(', ')||'').trim(),limit=Number.isFinite(Number(args.limit))?Math.min(1000,Math.max(1,Math.floor(Number(args.limit)))):500;
   const key=JSON.stringify({role,loc,skills:args.skills||[],keywords:args.keywords||[],countries:args.countries||[]}),hit=cache.get(key);
   if(hit&&hit.expires>Date.now())return{...hit.value,jobs:hit.value.jobs.slice(0,limit),report:{...hit.value.report,targetCount:limit,returnedJobs:Math.min(limit,hit.value.jobs.length),reachedRequestedLimit:hit.value.jobs.length>=limit}};
   if(pending.has(key)){const value=await pending.get(key);return{...value,jobs:value.jobs.slice(0,limit)};}
-  const work=discover(args,Math.min(limit,envInt('BRAVE_SEARCH_MAX_RESULTS',1000,50,1000)));pending.set(key,work);
+  const work=discover(args,Math.min(limit,envInt('SERPER_SEARCH_MAX_RESULTS',1000,50,1000)));pending.set(key,work);
   try{const value=await work;cache.set(key,{value,expires:Date.now()+15*60*1000});if(cache.size>60)cache.delete(cache.keys().next().value);return value;}finally{pending.delete(key);}
 }
 const tools=[{name:'search_jobs',description:'Search role/location-specific indexed public job pages and careers/ATS boards; extracts schema.org JobPosting data where available.',inputSchema:{type:'object',properties:{query:{type:'string'},location:{type:'string'},countries:{type:'array',items:{type:'string'}},skills:{type:'array',items:{type:'string'}},keywords:{type:'array',items:{type:'string'}},remote:{type:'boolean'},experienceYears:{type:'number'},limit:{type:'integer',minimum:1,maximum:1000}},required:['query','location']}}];
@@ -236,14 +257,14 @@ function sendError(id,code,message){process.stdout.write(JSON.stringify({jsonrpc
 async function handle(m){
   if(!m||m.jsonrpc!=='2.0'||typeof m.method!=='string')return;
   const id=m.id;if(id===undefined||id===null||m.method.startsWith('notifications/'))return;
-  if(m.method==='initialize'){send(id,{protocolVersion:m.params?.protocolVersion||'2025-11-25',capabilities:{tools:{}},serverInfo:{name:'nvoid-brave-job-crawler',version:'1.0.0'}});return;}
+  if(m.method==='initialize'){send(id,{protocolVersion:m.params?.protocolVersion||'2025-11-25',capabilities:{tools:{}},serverInfo:{name:'nvoid-serper-job-crawler',version:'1.0.0'}});return;}
   if(m.method==='ping'){send(id,{});return;}
   if(m.method==='tools/list'){send(id,{tools});return;}
   if(m.method==='tools/call'){if(m.params?.name!=='search_jobs'){sendError(id,-32602,'Unknown tool');return;}
-    try{const value=await search(m.params?.arguments||{}),result={jobs:value.jobs,source:'Brave Search Engine and Public Job Page Crawler',returnedCount:value.jobs.length,searchMetadata:value.report};send(id,{content:[{type:'text',text:JSON.stringify(result)}],structuredContent:result,isError:false});}
+    try{const value=await search(m.params?.arguments||{}),result={jobs:value.jobs,source:'Serper Google Search and Public Job Page Crawler',returnedCount:value.jobs.length,searchMetadata:value.report};send(id,{content:[{type:'text',text:JSON.stringify(result)}],structuredContent:result,isError:false});}
     catch(e){sendError(id,-32000,e instanceof Error?e.message:String(e));}return;}
   sendError(id,-32601,'Unsupported method');
 }
 function start(){const rl=readline.createInterface({input:process.stdin,crlfDelay:Infinity});rl.on('line',line=>{if(!line.trim())return;try{void handle(JSON.parse(line)).catch(e=>process.stderr.write(String(e)+'\n'));}catch{process.stderr.write('Ignored invalid MCP JSON.\n');}});}
 if(require.main===module)start();
-module.exports={buildSearchQueries,family,matchesRole,locationMatch,safeUrl,isJobUrl,parsePage};
+module.exports={buildSearchQueries,family,matchesRole,locationMatch,safeUrl,isJobUrl,parsePage,normalizeSearchResponse};
