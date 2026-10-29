@@ -225,13 +225,17 @@ function matchesLocation(job, requested, remoteOnly) {
 
 function countryFor(location) {
   const s = normalize(location);
-  if (/\b(india|bengaluru|bangalore|delhi|mumbai|hyderabad|chennai|pune|kolkata)\b/.test(s)) return 'india';
-  if (/\b(united kingdom|uk|london)\b/.test(s)) return 'uk';
+  if (/\b(worldwide|global|anywhere|all countries|remote)\b/.test(s)) return undefined;
+  if (/\b(india|bengaluru|bangalore|delhi|mumbai|hyderabad|chennai|pune|kolkata|noida|gurugram|gurgaon)\b/.test(s)) return 'india';
+  if (/\b(united kingdom|uk|london|manchester|birmingham)\b/.test(s)) return 'uk';
   if (/\b(canada|toronto|vancouver|montreal)\b/.test(s)) return 'canada';
-  if (/\b(australia|sydney|melbourne)\b/.test(s)) return 'australia';
-  if (/\b(germany|berlin)\b/.test(s)) return 'germany';
-  if (/\b(france|paris)\b/.test(s)) return 'france';
-  return 'india';
+  if (/\b(australia|sydney|melbourne|perth|brisbane)\b/.test(s)) return 'australia';
+  if (/\b(germany|berlin|munich|frankfurt)\b/.test(s)) return 'germany';
+  if (/\b(france|paris|lyon)\b/.test(s)) return 'france';
+  if (/\b(singapore)\b/.test(s)) return 'singapore';
+  if (/\b(uae|united arab emirates|dubai|abu dhabi)\b/.test(s)) return 'uae';
+  if (/\b(usa|united states|new york|san francisco|california|texas|seattle|austin|chicago|boston|los angeles)\b/.test(s)) return 'usa';
+  return undefined;
 }
 
 function selectedSites() {
