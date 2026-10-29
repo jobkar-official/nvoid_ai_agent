@@ -44,6 +44,9 @@ export class McpConfigService {
       });
       const canEnable =
         server.id === 'brave-search' && has('BRAVE_SEARCH_API_KEY') ||
+        server.id === 'greenhouse' && has('GREENHOUSE_BOARDS') ||
+        server.id === 'lever' && has('LEVER_SITES') ||
+        server.id === 'ashby' && has('ASHBY_BOARDS') ||
         (server.id === 'apify-boards' || server.id === 'apify-apna') && has('APIFY_API_TOKEN') ||
         server.id === 'adzuna' && has('ADZUNA_APP_ID', 'ADZUNA_APP_KEY') ||
         server.id === 'jooble' && has('JOOBLE_API_KEY');
