@@ -21,6 +21,18 @@ const SOURCE_CONFIG = {
     remoteOnly: true,
     maxPages: 5,
     cacheSeconds: 1800
+  },
+  adzuna: {
+    label: 'Adzuna',
+    remoteOnly: false,
+    maxPages: 1,
+    cacheSeconds: 1800
+  },
+  jooble: {
+    label: 'Jooble',
+    remoteOnly: false,
+    maxPages: 1,
+    cacheSeconds: 1800
   }
 };
 
