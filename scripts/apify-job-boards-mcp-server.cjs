@@ -84,7 +84,7 @@ function roleFamily(value) {
 function matchesRole(job, query) {
   const title = text(job.title || job.position || job.jobTitle || job.job_title);
   if (!title) return false;
-  const evidence = normalize(title + ' ' + text(job.skills) + ' ' + text(job.job_function) + ' ' + text(job.category));
+  const evidence = normalize(title + ' ' + text(job.tags) + ' ' + text(job.skills) + ' ' + text(job.job_function) + ' ' + text(job.category));
   const targetFamily = roleFamily(query);
   const listingFamily = roleFamily(title);
   if (targetFamily && listingFamily && targetFamily !== listingFamily) return false;
