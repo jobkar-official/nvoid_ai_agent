@@ -195,6 +195,9 @@ export class McpRegistryService implements OnApplicationBootstrap, OnModuleDestr
     const inheritedEnvKeys = [
       'PATH', 'HOME', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'LC_ALL',
       'SYSTEMROOT', 'WINDIR', 'APPDATA', 'LOCALAPPDATA', 'USERPROFILE', 'PATHEXT',
+      'BRAVE_SEARCH_MAX_RESULTS', 'BRAVE_SEARCH_MAX_QUERIES', 'BRAVE_SEARCH_MAX_PAGES_PER_QUERY',
+      'BRAVE_SEARCH_MAX_REQUESTS', 'BRAVE_SEARCH_MAX_PAGE_FETCHES', 'BRAVE_SEARCH_CONCURRENCY',
+      'BRAVE_SEARCH_PAGE_CRAWL_CONCURRENCY',
     ];
     const inheritedEnv = Object.fromEntries(
       inheritedEnvKeys
