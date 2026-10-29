@@ -56,7 +56,7 @@ export class JobDiscoveryService {
         const sourceArgs = entry.server.id === 'remoteok'
           ? {
               ...(args ?? {}),
-              query: [profile.jobTitle, ...(profile.keywords ?? []).slice(0, 3), ...(profile.skills ?? []).slice(0, 4)].filter(Boolean).join(' '),
+              query: profile.jobTitle,
               location: profile.location ?? profile.countries?.join(', ') ?? 'Worldwide',
               limit: Math.min(100, requestedLimit),
             }
