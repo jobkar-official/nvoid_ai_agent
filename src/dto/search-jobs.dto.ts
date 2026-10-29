@@ -139,7 +139,7 @@ export class SearchJobsDto {
   @IsInt()
   @Min(1)
   @Max(1000)
-  limit = 500;
+  limit = 1000;
 
   @IsOptional()
   @IsArray()
