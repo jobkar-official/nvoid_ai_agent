@@ -1,8 +1,26 @@
 [
   {
+    "id": "jobicy",
+    "name": "Jobicy Live Remote Jobs",
+    "enabled": true,
+    "transport": "http",
+    "url": "https://jobicy.com/mcp",
+    "jobSearch": {
+      "tool": "get_jobs",
+      "arguments": {
+        "tag": {
+          "$profile": "jobTitle"
+        },
+        "count": {
+          "$context": "limit"
+        }
+      }
+    }
+  },
+  {
     "id": "demo",
     "name": "Nvoid Local Demo Jobs (synthetic data)",
-    "enabled": true,
+    "enabled": false,
     "transport": "stdio",
     "command": "node",
     "args": [
