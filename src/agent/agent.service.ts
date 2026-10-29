@@ -18,6 +18,7 @@ export class AgentService {
     const search = await this.discovery.search(profile, dto.searchLimit, dto.serverIds, dto.syncToBackend !== false);
     const applications = search.jobs
       .filter((job) => job.matchScore >= dto.minMatchScore!)
+      .filter((job) => job.source !== 'jobicy')
       .filter((job) => Boolean(job.applicationUrl || job.jobUrl || this.mcpRegistry.getJobApplicationConfig(job.source)))
       .slice(0, dto.applyLimit)
       .map((job): ApplicationJobDto => ({
@@ -46,7 +47,15 @@ export class AgentService {
       };
       queueResult = await this.applications.enqueue(enqueueDto);
     } else {
-      queueResult = { requested: 0, queued: 0, tasks: [], note: 'No jobs met the score and application-source requirements.' };
+      const listingOnlyJobs = search.jobs.filter((job) => job.source === 'jobicy').length;
+      queueResult = {
+        requested: 0,
+        queued: 0,
+        tasks: [],
+        note: listingOnlyJobs > 0
+          ? 'Jobicy public results link to listing pages, not verified employer application forms. Open a listing and continue on the employer site; these results were not queued as applications.'
+          : 'No jobs met the score and application-source requirements.',
+      };
     }
 
     return {
