@@ -42,6 +42,99 @@
     }
   },
   {
+    "id": "arbeitnow",
+    "name": "Arbeitnow Public Jobs",
+    "enabled": true,
+    "transport": "stdio",
+    "command": "node",
+    "args": [
+      "./scripts/public-job-boards-mcp-server.cjs",
+      "arbeitnow"
+    ],
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        },
+        "skills": {
+          "$profile": "skills"
+        },
+        "keywords": {
+          "$profile": "keywords"
+        }
+      }
+    }
+  },
+  {
+    "id": "workingnomads",
+    "name": "Working Nomads Live Remote Jobs",
+    "enabled": true,
+    "transport": "stdio",
+    "command": "node",
+    "args": [
+      "./scripts/public-job-boards-mcp-server.cjs",
+      "workingnomads"
+    ],
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        },
+        "skills": {
+          "$profile": "skills"
+        },
+        "keywords": {
+          "$profile": "keywords"
+        }
+      }
+    }
+  },
+  {
+    "id": "himalayas",
+    "name": "Himalayas Live Remote Jobs",
+    "enabled": true,
+    "transport": "stdio",
+    "command": "node",
+    "args": [
+      "./scripts/public-job-boards-mcp-server.cjs",
+      "himalayas"
+    ],
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        },
+        "skills": {
+          "$profile": "skills"
+        },
+        "keywords": {
+          "$profile": "keywords"
+        }
+      }
+    }
+  },
+  {
     "id": "demo",
     "name": "Nvoid Local Demo Jobs (synthetic data)",
     "enabled": false,
@@ -61,6 +154,226 @@
         },
         "limit": {
           "$context": "limit"
+        }
+      }
+    }
+  },
+  {
+    "id": "adzuna",
+    "name": "Adzuna Job Search API (credential required)",
+    "enabled": false,
+    "transport": "stdio",
+    "command": "node",
+    "args": [
+      "./scripts/public-job-boards-mcp-server.cjs",
+      "adzuna"
+    ],
+    "env": {
+      "ADZUNA_APP_ID": "${ADZUNA_APP_ID}",
+      "ADZUNA_APP_KEY": "${ADZUNA_APP_KEY}",
+      "ADZUNA_COUNTRY": "${ADZUNA_COUNTRY}"
+    },
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        },
+        "skills": {
+          "$profile": "skills"
+        },
+        "keywords": {
+          "$profile": "keywords"
+        }
+      }
+    }
+  },
+  {
+    "id": "jooble",
+    "name": "Jooble Job Search API (credential required)",
+    "enabled": false,
+    "transport": "stdio",
+    "command": "node",
+    "args": [
+      "./scripts/public-job-boards-mcp-server.cjs",
+      "jooble"
+    ],
+    "env": {
+      "JOOBLE_API_KEY": "${JOOBLE_API_KEY}"
+    },
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        },
+        "skills": {
+          "$profile": "skills"
+        },
+        "keywords": {
+          "$profile": "keywords"
+        }
+      }
+    }
+  },
+  {
+    "id": "naukri",
+    "name": "Naukri MCP (requires authorized connector)",
+    "enabled": false,
+    "transport": "http",
+    "url": "${NAUKRI_MCP_URL}",
+    "headers": {
+      "Authorization": "Bearer ${NAUKRI_MCP_TOKEN}"
+    },
+    "jobSearch": {
+      "tool": "REPLACE_WITH_ACTUAL_SEARCH_TOOL_NAME",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        },
+        "skills": {
+          "$profile": "skills"
+        },
+        "keywords": {
+          "$profile": "keywords"
+        }
+      }
+    }
+  },
+  {
+    "id": "indeed",
+    "name": "Indeed MCP (requires approved access)",
+    "enabled": false,
+    "transport": "http",
+    "url": "${INDEED_MCP_URL}",
+    "headers": {
+      "Authorization": "Bearer ${INDEED_MCP_TOKEN}"
+    },
+    "jobSearch": {
+      "tool": "REPLACE_WITH_ACTUAL_SEARCH_TOOL_NAME",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        },
+        "skills": {
+          "$profile": "skills"
+        },
+        "keywords": {
+          "$profile": "keywords"
+        }
+      }
+    }
+  },
+  {
+    "id": "linkedin",
+    "name": "LinkedIn Jobs MCP (requires approved access)",
+    "enabled": false,
+    "transport": "http",
+    "url": "${LINKEDIN_MCP_URL}",
+    "headers": {
+      "Authorization": "Bearer ${LINKEDIN_MCP_TOKEN}"
+    },
+    "jobSearch": {
+      "tool": "REPLACE_WITH_ACTUAL_SEARCH_TOOL_NAME",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        },
+        "skills": {
+          "$profile": "skills"
+        },
+        "keywords": {
+          "$profile": "keywords"
+        }
+      }
+    }
+  },
+  {
+    "id": "glassdoor",
+    "name": "Glassdoor MCP (requires authorized partner)",
+    "enabled": false,
+    "transport": "http",
+    "url": "${GLASSDOOR_MCP_URL}",
+    "headers": {
+      "Authorization": "Bearer ${GLASSDOOR_MCP_TOKEN}"
+    },
+    "jobSearch": {
+      "tool": "REPLACE_WITH_ACTUAL_SEARCH_TOOL_NAME",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        },
+        "skills": {
+          "$profile": "skills"
+        },
+        "keywords": {
+          "$profile": "keywords"
+        }
+      }
+    }
+  },
+  {
+    "id": "apna",
+    "name": "Apna Jobs MCP (requires authorized connector)",
+    "enabled": false,
+    "transport": "http",
+    "url": "${APNA_MCP_URL}",
+    "headers": {
+      "Authorization": "Bearer ${APNA_MCP_TOKEN}"
+    },
+    "jobSearch": {
+      "tool": "REPLACE_WITH_ACTUAL_SEARCH_TOOL_NAME",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        },
+        "skills": {
+          "$profile": "skills"
+        },
+        "keywords": {
+          "$profile": "keywords"
         }
       }
     }
