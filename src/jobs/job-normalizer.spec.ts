@@ -1,4 +1,4 @@
-import { calculateMatchScore, normalizeJob, parseMcpJobResult } from './job-normalizer';
+import { calculateMatchScore, normalizeJob, parseMcpJobResult, resolveRemoteOkApplicationUrl } from './job-normalizer';
 import type { JobProfile } from '../common/job.types';
 
 const profile: JobProfile = {
@@ -78,6 +78,24 @@ describe('job-normalizer', () => {
     expect(job?.jobUrl).toBe('https://remoteok.com/remote-jobs/remoteok-1');
     expect(job?.applicationUrl).toBe('https://careers.example.org/jobs/remoteok-1');
     expect(job?.postedAt).toBe('2026-10-29T10:00:00Z');
+  });
+
+  it('does not treat the Remote OK listing URL as a direct employer application URL', () => {
+    expect(resolveRemoteOkApplicationUrl(
+      'https://remoteok.com/remote-jobs/remote-software-engineer-123',
+      'https://remoteOK.com/remote-jobs/remote-software-engineer-123'
+    )).toBeUndefined();
+    expect(resolveRemoteOkApplicationUrl(
+      'https://remoteok.com/remote-jobs/remote-software-engineer-123',
+      'https://www.remoteok.com/remote-jobs/remote-software-engineer-123'
+    )).toBeUndefined();
+  });
+
+  it('accepts a distinct external employer application URL from Remote OK', () => {
+    expect(resolveRemoteOkApplicationUrl(
+      'https://remoteok.com/remote-jobs/remote-software-engineer-123',
+      'https://careers.example.org/jobs/123'
+    )).toBe('https://careers.example.org/jobs/123');
   });
 
   it('rejects records without a job title', () => {
