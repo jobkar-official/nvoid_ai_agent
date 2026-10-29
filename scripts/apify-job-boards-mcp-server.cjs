@@ -283,7 +283,10 @@ function boardInput(args) {
     location: String(args.location).trim(),
     sites,
     countryIndeed: countryFor(args.location),
-    maxResults: Math.min(25, Math.max(1, Number(args.limit) || 15)),
+    maxResults: Math.min(
+      Math.max(1, Number(process.env.APIFY_JOB_BOARDS_MAX_RESULTS) || 15),
+      Math.max(1, Number(args.limit) || 15)
+    ),
     isRemote: args.remoteOnly === true,
     descriptionFormat: 'markdown',
     enforceAnnualSalary: true,
@@ -295,7 +298,10 @@ function boardInput(args) {
 }
 
 function apnaInput(args) {
-  const limit = Math.min(100, Math.max(1, Number(args.limit) || 25));
+  const limit = Math.min(
+    Math.max(1, Number(process.env.APIFY_APNA_MAX_ITEMS) || 25),
+    Math.max(1, Number(args.limit) || 25)
+  );
   return {
     keyword: String(args.query).trim(),
     location: String(args.location).trim(),
@@ -336,7 +342,7 @@ async function runActor(actorId, input) {
   }
   const datasetId = text(run.defaultDatasetId || started.data?.defaultDatasetId || started.defaultDatasetId);
   if (!datasetId) throw new Error('Apify actor succeeded but returned no default dataset.');
-  const limit = MODE === 'apna' ? 100 : Math.min(200, Math.max(10, Number(input.maxResults) * selectedSites().length));
+  const limit = MODE === 'apna' ? input.maxItems : Math.min(200, Math.max(10, Number(input.maxResults) * selectedSites().length));
   const items = await apiRequest('/datasets/' + encodeURIComponent(datasetId) + '/items?clean=true&format=json&limit=' + limit);
   if (!Array.isArray(items)) throw new Error('Apify dataset response was not a JSON array.');
   return items;
