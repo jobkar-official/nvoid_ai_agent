@@ -407,19 +407,21 @@ function matchesLocation(job, requested, remoteOnly = false) {
 
 function mapJob(job) {
   if (SOURCE === 'adzuna') {
+    const countryCode = String(process.env.ADZUNA_COUNTRY || 'in').toLowerCase();
+    const currency = ({ in: 'INR', gb: 'GBP', us: 'USD', ca: 'CAD', au: 'AUD', de: 'EUR', fr: 'EUR', nz: 'NZD' })[countryCode];
     return {
       id: text(job.id || job.redirect_url),
       title: text(job.title),
       company: text(job.company?.display_name || job.company),
       location: text(job.location?.display_name || job.location),
-      country: process.env.ADZUNA_COUNTRY || 'in',
+      country: countryCode.toUpperCase(),
       description: text(job.description),
       tags: text(job.category?.label || job.category?.tag || job.category),
       employmentType: text(job.contract_type || job.contract_time),
       workMode: 'On-site / Hybrid / not specified',
       salaryMin: typeof job.salary_min === 'number' ? job.salary_min : undefined,
       salaryMax: typeof job.salary_max === 'number' ? job.salary_max : undefined,
-      salaryCurrency: 'INR',
+      salaryCurrency: currency,
       postedAt: text(job.created),
       url: text(job.redirect_url || job.url),
       source: 'adzuna',
@@ -439,6 +441,58 @@ function mapJob(job) {
       postedAt: text(job.updated),
       url: text(job.link || job.url),
       source: 'jooble',
+      raw: job
+    };
+  }
+  if (SOURCE === 'greenhouse') {
+    const location = text(job.location?.name || job.location || job.offices);
+    return {
+      id: text(job.id || job.requisition_id || job.absolute_url),
+      title: text(job.title),
+      company: text(job._boardToken || job.company_name || job.company),
+      location,
+      description: text(job.content || job.description),
+      tags: [job.departments, job.offices].map(text).filter(Boolean).join(' '),
+      postedAt: text(job.updated_at),
+      url: text(job.absolute_url || job.url),
+      applicationUrl: text(job.absolute_url || job.url),
+      source: 'greenhouse',
+      raw: job
+    };
+  }
+  if (SOURCE === 'lever') {
+    const categories = job.categories && typeof job.categories === 'object' ? job.categories : {};
+    return {
+      id: text(job.id || job.hostedUrl),
+      title: text(job.text || job.title),
+      company: text(job._boardToken || job.company || job.companyName),
+      location: text(categories.location || job.location),
+      description: text(job.descriptionPlain || job.description || job.additional),
+      tags: [categories.team, categories.department, categories.commitment].map(text).filter(Boolean).join(' '),
+      employmentType: text(categories.commitment || job.workplaceType),
+      workMode: text(job.workplaceType),
+      postedAt: text(job.createdAt),
+      url: text(job.hostedUrl || job.url),
+      applicationUrl: text(job.applyUrl),
+      source: 'lever',
+      raw: job
+    };
+  }
+  if (SOURCE === 'ashby') {
+    return {
+      id: text(job.jobUrl || job.applyUrl || job.id),
+      title: text(job.title),
+      company: text(job._boardToken || job.companyName || job.company),
+      location: displayLocation(job, true),
+      country: text(job.address?.postalAddress?.addressCountry || job.country),
+      description: text(job.descriptionPlain || job.descriptionHtml || job.description),
+      tags: [job.department, job.team, job.seniority].map(text).filter(Boolean).join(' '),
+      employmentType: text(job.employmentType),
+      workMode: job.isRemote === true ? 'Remote' : text(job.workplaceType),
+      postedAt: text(job.publishedAt || job.updatedAt),
+      url: text(job.jobUrl || job.url),
+      applicationUrl: text(job.applyUrl),
+      source: 'ashby',
       raw: job
     };
   }
@@ -464,8 +518,8 @@ function mapJob(job) {
       id: text(job.id || job.slug || job.url),
       title: text(job.title),
       company: text(job.company || job.company_name || job.companyName),
-      location: text(job.location || job.location_restrictions || job.country || 'Remote · eligibility not stated'),
-      country: text(job.country || job.location_country),
+      location: displayLocation(job, true),
+      country: text(job.country || job.location_country || job.location_restrictions),
       description: text(job.description || job.excerpt),
       tags: [job.category, job.category_name, job.tags, job.skills].map(text).filter(Boolean).join(' '),
       employmentType: text(job.job_type || job.job_type_name || job.type),
@@ -473,6 +527,38 @@ function mapJob(job) {
       postedAt: text(job.pub_date || job.published_at || job.created_at || job.date),
       url: text(job.url || job.job_url),
       source: 'workingnomads',
+      raw: job
+    };
+  }
+  if (SOURCE === 'remotive') {
+    return {
+      id: text(job.id || job.url),
+      title: text(job.title),
+      company: text(job.company_name || job.company),
+      location: text(job.candidate_required_location || job.location),
+      description: text(job.description || job.excerpt),
+      tags: [job.category, job.tags, job.job_type].map(text).filter(Boolean).join(' '),
+      employmentType: text(job.job_type),
+      workMode: 'Remote',
+      postedAt: text(job.publication_date || job.created_at),
+      url: text(job.url),
+      source: 'remotive',
+      raw: job
+    };
+  }
+  if (SOURCE === 'weworkremotely') {
+    return {
+      id: text(job.id || job.url),
+      title: text(job.title),
+      company: text(job.company),
+      location: displayLocation(job, true),
+      description: text(job.description),
+      tags: text(job.tags),
+      employmentType: text(job.employmentType),
+      workMode: 'Remote',
+      postedAt: text(job.postedAt),
+      url: text(job.url),
+      source: 'weworkremotely',
       raw: job
     };
   }
@@ -492,6 +578,20 @@ function mapJob(job) {
     source: 'himalayas',
     raw: job
   };
+}
+
+async function fetchText(url, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      accept: 'application/rss+xml, application/xml, text/xml, */*',
+      'user-agent': 'NvoidJobAgent/1.0 (+https://jobkar.in)',
+      ...(options.headers || {})
+    },
+    signal: AbortSignal.timeout(25000)
+  });
+  if (!response.ok) throw new Error(SOURCE_CONFIG[SOURCE].label + ' feed returned HTTP ' + response.status);
+  return response.text();
 }
 
 async function fetchJson(url, options = {}) {
