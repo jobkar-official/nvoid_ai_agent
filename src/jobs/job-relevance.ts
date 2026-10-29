@@ -163,6 +163,42 @@ function countriesIn(value: unknown): string[] {
   return checks.filter(([, pattern]) => pattern.test(s)).map(([country]) => country);
 }
 
+function citiesIn(value: unknown): string[] {
+  const s = normalize(value);
+  const checks: Array<[string, RegExp]> = [
+    ['bengaluru', /\b(bengaluru|bangalore)\b/],
+    ['delhi-ncr', /\b(delhi|new delhi|delhi ncr|noida|greater noida|gurugram|gurgaon|ghaziabad|faridabad)\b/],
+    ['mumbai-metro', /\b(mumbai|bombay|navi mumbai|thane)\b/],
+    ['hyderabad', /\bhyderabad\b/],
+    ['chennai', /\b(chennai|madras)\b/],
+    ['pune', /\bpune\b/],
+    ['kolkata', /\b(kolkata|calcutta)\b/],
+    ['singapore', /\bsingapore\b/],
+    ['sydney', /\bsydney\b/],
+    ['melbourne', /\bmelbourne\b/],
+    ['london', /\blondon\b/],
+    ['berlin', /\bberlin\b/],
+    ['paris', /\bparis\b/],
+    ['toronto', /\btoronto\b/],
+    ['vancouver', /\bvancouver\b/],
+    ['new-york', /\bnew york\b/],
+    ['san-francisco', /\bsan francisco\b/],
+    ['austin', /\baustin\b/],
+  ];
+  return checks.filter(([, pattern]) => pattern.test(s)).map(([city]) => city);
+}
+
+function isRemoteJob(job: NormalizedJob): boolean {
+  const raw = job.raw ?? {};
+  const nested = raw.raw && typeof raw.raw === 'object' ? raw.raw as Record<string, unknown> : undefined;
+  const workMode = normalize(job.workMode ?? raw.workMode ?? raw.work_mode ?? raw.workplaceType ?? nested?.workMode ?? nested?.work_mode);
+  return /\b(remote|work from home|work from anywhere|telecommute|distributed remote)\b/.test(workMode)
+    || raw.remote === true
+    || raw.is_remote === true
+    || nested?.remote === true
+    || nested?.is_remote === true;
+}
+
 function isExplicitGlobalEligibility(value: unknown): boolean {
   return /\b(available worldwide|worldwide eligible|work from anywhere|remote from anywhere|remote worldwide|anywhere in the world|open to candidates worldwide|eligible in all countries|remote from any location)\b/i.test(String(value ?? ''));
 }
@@ -199,6 +235,42 @@ function matchesOneLocation(job: NormalizedJob, target: string): boolean {
 
   const targetCountries = countriesIn(target);
   const jobCountries = countriesIn(structured);
+  const targetCities = citiesIn(target);
+  const jobCities = citiesIn(structured);
+
+  if (targetCountries.length && jobCountries.length && !targetCountries.some((country) => jobCountries.includes(country))) {
+    return false;
+  }
+
+  const description = String(job.description ?? job.raw?.description ?? job.raw?.excerpt ?? '');
+  if (isExplicitGlobalEligibility(description)) return true;
+
+  if (targetCities.length) {
+    if (jobCities.length) return targetCities.some((city) => jobCities.includes(city));
+    if (!isRemoteJob(job)) return false;
+
+    if (targetCountries.length && jobCountries.length) {
+      return targetCountries.some((country) => jobCountries.includes(country));
+    }
+
+    const targetRegions = regionsIn(target);
+    const jobRegions = regionsIn(structured);
+    if (targetRegions.length && jobRegions.length) {
+      return targetRegions.some((region) => jobRegions.includes(region));
+    }
+
+    const restriction = description.match(/(?:based in|based out of|located in|must be (?:located|based|resident) in|residing in|residing within|candidates? (?:must|should) be (?:located|based) in|only available in|available only in|position is restricted to)\s+([^.<\n]{2,70})/i);
+    if (restriction) {
+      const allowedCountries = countriesIn(restriction[1]);
+      if (targetCountries.length && allowedCountries.length) return targetCountries.some((country) => allowedCountries.includes(country));
+      const allowedRegions = regionsIn(restriction[1]);
+      if (targetRegions.length && allowedRegions.length) return targetRegions.some((region) => allowedRegions.includes(region));
+      const allowed = normalize(restriction[1]);
+      return allowed.includes(targetNormalized) || targetNormalized.includes(allowed);
+    }
+    return false;
+  }
+
   if (targetCountries.length && jobCountries.length) {
     return targetCountries.some((country) => jobCountries.includes(country));
   }
@@ -208,9 +280,6 @@ function matchesOneLocation(job: NormalizedJob, target: string): boolean {
   if (targetRegions.length && jobRegions.length) {
     return targetRegions.some((region) => jobRegions.includes(region));
   }
-
-  const description = String(job.description ?? job.raw?.description ?? job.raw?.excerpt ?? '');
-  if (isExplicitGlobalEligibility(description)) return true;
 
   if (structuredNormalized) {
     const wanted = tokens(target).filter((term) => term.length > 2);
@@ -222,10 +291,7 @@ function matchesOneLocation(job: NormalizedJob, target: string): boolean {
   const restriction = description.match(/(?:based in|based out of|located in|must be (?:located|based|resident) in|residing in|residing within|candidates? (?:must|should) be (?:located|based) in|only available in|available only in|position is restricted to)\s+([^.<\n]{2,70})/i);
   if (restriction) {
     const allowed = normalize(restriction[1]);
-    const requested = normalize(target);
-    const allowedRegions = regionsIn(allowed);
-    if (targetRegions.length && allowedRegions.length) return targetRegions.some((region) => allowedRegions.includes(region));
-    return allowed.includes(requested) || requested.includes(allowed);
+    return allowed.includes(targetNormalized) || targetNormalized.includes(allowed);
   }
 
   return false;
