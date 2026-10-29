@@ -451,5 +451,47 @@
         }
       }
     }
+  },
+  {
+    "id": "brave-search",
+    "name": "Brave Search Engine and Public Job Page Crawler",
+    "enabled": false,
+    "transport": "stdio",
+    "command": "node",
+    "args": [
+      "./scripts/search-engine-jobs-mcp-server.cjs"
+    ],
+    "env": {
+      "BRAVE_SEARCH_API_KEY": "${BRAVE_SEARCH_API_KEY}"
+    },
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "countries": {
+          "$profile": "countries"
+        },
+        "skills": {
+          "$profile": "skills"
+        },
+        "keywords": {
+          "$profile": "keywords"
+        },
+        "remote": {
+          "$profile": "remote"
+        },
+        "experienceYears": {
+          "$profile": "experienceYears"
+        },
+        "limit": {
+          "$context": "limit"
+        }
+      }
+    }
   }
 ]
