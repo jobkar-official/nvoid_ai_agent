@@ -25,7 +25,7 @@ export default () => ({
   browserNavigationTimeoutMs: Number.parseInt(process.env.BROWSER_NAVIGATION_TIMEOUT_MS ?? '30000', 10),
   resumeStorageDir: process.env.RESUME_STORAGE_DIR ?? './private-resumes',
   screenshotDir: process.env.SCREENSHOT_DIR ?? './artifacts',
-  maxSearchResults: Math.min(1000, Math.max(500, Number.parseInt(process.env.MAX_SEARCH_RESULTS ?? '500', 10))),
+  maxSearchResults: Math.min(1000, Math.max(500, Number.parseInt(process.env.MAX_SEARCH_RESULTS ?? '1000', 10))),
   llm: {
     baseUrl: process.env.LLM_API_BASE_URL ?? 'https://api.openai.com/v1',
     apiKey: process.env.LLM_API_KEY ?? '',
