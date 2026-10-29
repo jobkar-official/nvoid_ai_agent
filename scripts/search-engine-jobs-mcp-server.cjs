@@ -102,9 +102,10 @@ function buildSearchQueries(profile) {
     'site:myworkdayjobs.com '+rq+suffix,'site:jobs.smartrecruiters.com '+rq+suffix,
     'site:linkedin.com/jobs/view '+rq+suffix,'site:naukri.com/job-listings '+rq+suffix,
     'site:indeed.com/viewjob '+rq+suffix,'site:foundit.in/job '+rq+suffix,
-    'site:apna.co/job '+rq+suffix,'site:wellfound.com/jobs '+rq+suffix];
+    'site:apna.co/job '+rq+suffix,'site:wellfound.com/jobs '+rq+suffix,
+    'site:jobs.workable.com '+rq+suffix,'site:jobs.jobvite.com '+rq+suffix,'site:jobs.icims.com '+rq+suffix];
   if(skills.length)q.push(rq+' '+skills.map(quote).join(' ')+suffix+' career openings');
-  return [...new Set(q.map(x=>x.replace(/\s+/g,' ').trim()))].slice(0,envInt('BRAVE_SEARCH_MAX_QUERIES',15,1,18));
+  return [...new Set(q.map(x=>x.replace(/\s+/g,' ').trim()))].slice(0,envInt('BRAVE_SEARCH_MAX_QUERIES',18,1,18));
 }
 function safeUrl(raw) {
   try {
