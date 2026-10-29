@@ -43,8 +43,8 @@ const profile = {
 
 const health = await request('/api/health');
 if (health.status !== 'ok') throw new Error('Agent health check failed.');
-if ((health.mcp?.connected ?? 0) < 2) {
-  throw new Error('Expected both live MCP sources to be connected; health returned ' + JSON.stringify(health.mcp));
+if ((health.mcp?.connected ?? 0) < 5) {
+  throw new Error('Expected the five default live MCP sources to be connected; health returned ' + JSON.stringify(health.mcp));
 }
 
 const search = await request('/api/jobs/search', {
@@ -54,7 +54,7 @@ const search = await request('/api/jobs/search', {
 
 const sources = Array.isArray(search.sources) ? search.sources : [];
 const sourceIds = new Set(sources.map((source) => source.serverId));
-for (const requiredSource of ['jobicy', 'remoteok']) {
+for (const requiredSource of ['jobicy', 'remoteok', 'arbeitnow', 'workingnomads', 'himalayas']) {
   if (!sourceIds.has(requiredSource)) {
     throw new Error('Live source ' + requiredSource + ' was not included in search results: ' + JSON.stringify(sources));
   }
@@ -66,9 +66,10 @@ if (failedSources.length) {
 }
 
 const jobs = Array.isArray(search.jobs) ? search.jobs : [];
-if (jobs.length === 0) throw new Error('Both providers responded but the combined live search returned zero jobs.');
+if (jobs.length === 0) throw new Error('All live sources responded but the combined role-filtered search returned zero jobs.');
 
-const invalid = jobs.filter((job) => !['jobicy', 'remoteok'].includes(job.source) || !/^https?:\/\//i.test(job.jobUrl || ''));
+const liveSourceIds = ['jobicy', 'remoteok', 'arbeitnow', 'workingnomads', 'himalayas'];
+const invalid = jobs.filter((job) => !liveSourceIds.includes(job.source) || !/^https?:\/\//i.test(job.jobUrl || ''));
 if (invalid.length) throw new Error('Search returned a non-live source or a listing without an external URL: ' + JSON.stringify(invalid.slice(0, 2)));
 
 console.log('LIVE SOURCE CHECK PASSED');
