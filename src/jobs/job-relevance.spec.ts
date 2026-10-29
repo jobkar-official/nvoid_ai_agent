@@ -30,6 +30,10 @@ describe('job relevance filters', () => {
     expect(matchesJobTitle('DevOps Engineer', {}, 'Software Developer')).toBe(false);
     expect(matchesJobTitle('Technical Support Engineer', {}, 'Software Developer')).toBe(false);
     expect(matchesJobTitle('Sales Operations Lead', {}, 'Software Developer')).toBe(false);
+    expect(matchesJobTitle('Software Engineering Director', {}, 'Software Developer', 3)).toBe(false);
+    expect(matchesJobTitle('Lead Software Engineer', {}, 'Software Developer', 3)).toBe(false);
+    expect(matchesJobTitle('Software Engineer Intern', {}, 'Software Developer', 3)).toBe(false);
+    expect(matchesJobTitle('Engineering Director', {}, 'Engineering Director', 12)).toBe(true);
   });
 
   it('uses the target technology when the target role is specific', () => {
