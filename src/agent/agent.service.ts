@@ -16,10 +16,13 @@ export class AgentService {
   async run(dto: RunAgentDto) {
     const profile = { ...dto.profile, userId: dto.profile.userId ?? dto.userId };
     const search = await this.discovery.search(profile, dto.searchLimit, dto.serverIds, dto.syncToBackend !== false);
+    const directApplicationSources = new Set([
+      'jobicy', 'remoteok', 'arbeitnow', 'workingnomads', 'himalayas', 'adzuna', 'jooble',
+      'naukri', 'linkedin', 'indeed', 'glassdoor', 'ziprecruiter', 'bayt', 'apna',
+    ]);
     const applications = search.jobs
       .filter((job) => job.matchScore >= dto.minMatchScore!)
-      .filter((job) => job.source !== 'jobicy')
-      .filter((job) => job.source !== 'remoteok' || Boolean(job.applicationUrl))
+      .filter((job) => !directApplicationSources.has(job.source) || Boolean(job.applicationUrl))
       .filter((job) => Boolean(job.applicationUrl || job.jobUrl || this.mcpRegistry.getJobApplicationConfig(job.source)))
       .slice(0, dto.applyLimit)
       .map((job): ApplicationJobDto => ({
@@ -48,7 +51,7 @@ export class AgentService {
       };
       queueResult = await this.applications.enqueue(enqueueDto);
     } else {
-      const listingOnlyJobs = search.jobs.filter((job) => job.source === 'jobicy' || (job.source === 'remoteok' && !job.applicationUrl)).length;
+      const listingOnlyJobs = search.jobs.filter((job) => directApplicationSources.has(job.source) && !job.applicationUrl).length;
       queueResult = {
         requested: 0,
         queued: 0,
