@@ -3,6 +3,7 @@ const filters = require('../../scripts/public-job-boards-mcp-server.cjs') as {
   matchesLocation: (job: Record<string, unknown>, requested: string, remoteOnly?: boolean) => boolean;
   roleFamily: (value: string) => string | undefined;
   regionFor: (value: string) => string | undefined;
+  displayLocation: (job: Record<string, unknown>, remoteFallback?: boolean) => string;
 };
 
 describe('public job board source matching', () => {
@@ -41,6 +42,16 @@ describe('public job board source matching', () => {
     expect(filters.matchesLocation({
       description: 'Remote role. Candidates must be located in the United States.'
     }, 'Bengaluru', true)).toBe(false);
+  });
+
+  it('labels global and country-restricted remote listings with the provided eligibility', () => {
+    expect(filters.displayLocation({
+      location: 'Remote',
+      location_restrictions: ['India', 'Singapore']
+    }, true)).toBe('Remote · India Singapore');
+    expect(filters.displayLocation({
+      description: 'The role is available worldwide.'
+    }, true)).toBe('Worldwide');
   });
 
   it('recognizes provider geographic regions', () => {
