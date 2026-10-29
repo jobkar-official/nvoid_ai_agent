@@ -268,9 +268,14 @@ function credential() {
 
 async function apiRequest(path, options = {}) {
   const token = credential();
-  const response = await fetch(API_BASE + path + (path.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token), {
+  const response = await fetch(API_BASE + path, {
     ...options,
-    headers: { accept: 'application/json', ...(options.body ? { 'content-type': 'application/json' } : {}), ...(options.headers || {}) },
+    headers: {
+      accept: 'application/json',
+      authorization: 'Bearer ' + token,
+      ...(options.body ? { 'content-type': 'application/json' } : {}),
+      ...(options.headers || {})
+    },
     signal: AbortSignal.timeout(30000),
   });
   if (!response.ok) {
