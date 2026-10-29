@@ -107,7 +107,7 @@ export class JobDiscoveryService {
               const applicationUrl = resolveRemoteOkApplicationUrl(job.jobUrl, directUrl);
               return { ...job, applicationUrl };
             }
-            if (['jobicy', 'arbeitnow', 'workingnomads', 'himalayas', 'adzuna', 'jooble', 'remotive', 'weworkremotely', 'greenhouse', 'lever', 'ashby', 'brave-search'].includes(entry.server.id)) {
+            if (['jobicy', 'arbeitnow', 'workingnomads', 'himalayas', 'adzuna', 'jooble', 'remotive', 'weworkremotely', 'greenhouse', 'lever', 'ashby', 'serper-search'].includes(entry.server.id)) {
               return { ...job, applicationUrl: undefined };
             }
             return job;
