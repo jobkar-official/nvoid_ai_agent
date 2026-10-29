@@ -1,0 +1,72 @@
+name: Live job source check
+
+on:
+  push:
+    branches: [development]
+    paths:
+      - .github/workflows/live-source-check.yml
+  workflow_dispatch:
+  schedule:
+    - cron: '13 4 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  live-search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      NODE_ENV: production
+      PORT: "3100"
+      AGENT_API_KEY: nvoid-live-source-smoke-key-only
+      MCP_SERVERS_CONFIG: ./config/mcp-servers.json
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      AUTO_SUBMIT_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: development
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: node --check scripts/remoteok-mcp-server.cjs
+      - run: node --check scripts/live-source-smoke.mjs
+      - name: Start worker and verify live provider results
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run start:prod > /tmp/nvoid-live-agent.log 2>&1 &
+          server_pid=$!
+          cleanup() {
+            if kill -0 "$server_pid" 2>/dev/null; then kill "$server_pid" || true; fi
+            wait "$server_pid" 2>/dev/null || true
+            cat /tmp/nvoid-live-agent.log
+          }
+          trap cleanup EXIT
+          for attempt in $(seq 1 60); do
+            if curl --silent --show-error --fail http://127.0.0.1:3100/api/health > /tmp/nvoid-live-health.json 2>/dev/null; then
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              cat /tmp/nvoid-live-agent.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat /tmp/nvoid-live-health.json
+          node scripts/live-source-smoke.mjs
