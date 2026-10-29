@@ -26,6 +26,7 @@ describe('search-engine job crawler', () => {
     expect(crawler.locationMatch('Remote India', 'Candidates located in India', 'https://jobs.example.com/jobs/1', 'Bengaluru')).toBe(true);
     expect(crawler.locationMatch('Remote · eligibility not stated', 'Remote team', 'https://jobs.example.com/jobs/1', 'Bengaluru')).toBe(false);
     expect(crawler.locationMatch('Remote United States', 'US only', 'https://jobs.example.com/jobs/1', 'Bengaluru')).toBe(false);
+    expect(crawler.locationMatch('Pune, India', 'On-site role', 'https://jobs.example.com/jobs/1', 'Bengaluru, India')).toBe(false);
   });
   it('recognizes public job URLs and rejects unsafe URLs', () => {
     expect(crawler.isJobUrl('https://jobs.lever.co/acme/123')).toBe(true);
