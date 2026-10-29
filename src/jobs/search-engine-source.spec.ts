@@ -6,6 +6,7 @@ const crawler = require('../../scripts/search-engine-jobs-mcp-server.cjs') as {
   safeUrl: (url: string) => URL | undefined;
   isJobUrl: (url: string) => boolean;
   parsePage: (html: string, url: string) => { title: string; description: string; canonicalUrl: string; postings: Array<Record<string, unknown>> };
+  normalizeSearchResponse: (data: Record<string, unknown>) => { results: Array<Record<string, unknown>>; more: boolean };
 };
 describe('search-engine job crawler', () => {
   it('creates role/location dork queries across job boards and ATS platforms', () => {
@@ -35,6 +36,13 @@ describe('search-engine job crawler', () => {
     expect(crawler.isJobUrl('https://example.com/about')).toBe(false);
     expect(crawler.safeUrl('http://127.0.0.1/admin')).toBeUndefined();
     expect(crawler.safeUrl('file:///etc/passwd')).toBeUndefined();
+  });
+  it('normalizes Serper organic results into the crawler input shape', () => {
+    const normalized = crawler.normalizeSearchResponse({ organic: [{ title: 'Java Developer - Acme', link: 'https://jobs.lever.co/acme/123', snippet: 'Java roles in Bengaluru', domain: 'jobs.lever.co', date: '2 days ago' }] });
+    expect(normalized.results).toHaveLength(1);
+    expect(normalized.results[0].url).toBe('https://jobs.lever.co/acme/123');
+    expect(normalized.results[0].description).toBe('Java roles in Bengaluru');
+    expect(normalized.results[0].profile).toEqual({ name: 'jobs.lever.co', long_name: 'jobs.lever.co' });
   });
   it('extracts schema.org JobPosting structured data', () => {
     const html = '<html><head><title>Java Developer - Acme</title><meta name="description" content="Java role in Bengaluru"></head><body><script type="application/ld+json">{"@context":"https://schema.org","@type":"JobPosting","title":"Java Developer","hiringOrganization":{"@type":"Organization","name":"Acme"},"jobLocation":{"@type":"Place","address":{"@type":"PostalAddress","addressLocality":"Bengaluru","addressCountry":"India"}},"description":"Build Java services"}</script></body></html>';
