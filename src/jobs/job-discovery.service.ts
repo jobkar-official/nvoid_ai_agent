@@ -1,4 +1,4 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { JobProfile, NormalizedJob } from '../common/job.types';
 import { BackendSyncService } from '../common/backend-sync.service';
@@ -6,6 +6,7 @@ import { resolveTemplate } from '../common/template-resolver';
 import { AiAgentService } from '../common/ai-agent.service';
 import { McpRegistryService } from '../mcp/mcp-registry.service';
 import { calculateMatchScore, normalizeJob, parseMcpJobResult, resolveRemoteOkApplicationUrl } from './job-normalizer';
+import { matchesJobLocation, matchesJobTitle } from './job-relevance';
 
 export interface SearchResult {
   requestedLimit: number;
@@ -29,6 +30,11 @@ export class JobDiscoveryService {
   ) {}
 
   async search(profile: JobProfile, limit: number, serverIds?: string[], syncToBackend = true): Promise<SearchResult> {
+    if (!profile.jobTitle?.trim()) throw new BadRequestException('Enter a target job title before searching.');
+    if (!profile.location?.trim() && !(profile.countries ?? []).some((country) => country.trim() && !/^(worldwide|global|anywhere|remote|all countries)$/i.test(country.trim()))) {
+      throw new BadRequestException('Enter a preferred city, region, or country. Use Worldwide only when you want a global search.');
+    }
+
     const maximum = this.configService.get<number>('maxSearchResults', 200);
     const requestedLimit = Math.min(Math.max(1, limit), maximum);
     const servers = this.mcpRegistry.getJobSearchServers().filter((item) => !serverIds?.length || serverIds.includes(item.server.id));
@@ -69,14 +75,18 @@ export class JobDiscoveryService {
           .map((raw) => normalizeJob(raw, entry.server.id, profile))
           .filter((job): job is NormalizedJob => Boolean(job))
           .map((job) => {
-            if (entry.server.id === 'jobicy') return { ...job, applicationUrl: undefined };
             if (entry.server.id === 'remoteok') {
               const directUrl = job.raw?.apply_url ?? job.raw?.applyUrl ?? job.raw?.application_url;
               const applicationUrl = resolveRemoteOkApplicationUrl(job.jobUrl, directUrl);
               return { ...job, applicationUrl, workMode: job.workMode ?? 'Remote' };
             }
+            if (['jobicy', 'arbeitnow', 'workingnomads', 'himalayas', 'adzuna', 'jooble'].includes(entry.server.id)) {
+              return { ...job, applicationUrl: undefined };
+            }
             return job;
-          });
+          })
+          .filter((job) => matchesJobTitle(job.title, job.raw, profile.jobTitle))
+          .filter((job) => matchesJobLocation(job, profile));
         return { serverId: entry.server.id, tool: entry.tool, jobs };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
