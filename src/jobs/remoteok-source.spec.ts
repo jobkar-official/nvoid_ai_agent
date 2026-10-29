@@ -50,6 +50,19 @@ describe('Remote OK live source filters', () => {
     }, 'Bengaluru')).toBe(false);
   });
 
+  it('shows actual eligibility rather than the generic remote fallback when the feed provides it', () => {
+    expect(remoteOkFilters.displayLocation({
+      location: 'Remote',
+      location_country: 'India'
+    })).toBe('Remote · India');
+    expect(remoteOkFilters.displayLocation({
+      description: 'This remote position is available worldwide.'
+    })).toBe('Worldwide');
+    expect(remoteOkFilters.displayLocation({
+      description: 'Remote role with eligibility not stated.'
+    })).toBe('Remote · eligibility not stated');
+  });
+
   it('maps known regions consistently', () => {
     expect(remoteOkFilters.regionFor('Bengaluru, India')).toBe('apac');
     expect(remoteOkFilters.regionFor('Remote role based in Latin America')).toBe('latin-america');
