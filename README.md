@@ -6,14 +6,27 @@ This is a separate worker service. Keep your existing Next.js frontend and Sprin
 
 ## Live source coverage and integration boundaries
 
-The default `config/mcp-servers.json` enables two public sources for live remote-job discovery:
+The default runtime configuration enables five live public job sources:
 
-- **Jobicy MCP**: sends the candidate's role and a supported geographic region, caches each role/region query for one hour, and preserves the canonical Jobicy listing URL.
-- **Remote OK public feed**: fetches the public JSON feed, caches it for one hour, then locally filters records using the candidate's role and geographic preference while preserving the original Remote OK URL.
+- **Jobicy MCP** — current remote listings, queried by target role and supported geography.
+- **Remote OK** — live public remote-job feed, filtered locally by role and location.
+- **Arbeitnow** — public job-board feed, useful for local and remote opportunities, with stronger European coverage.
+- **Working Nomads** — public remote-job feed.
+- **Himalayas** — public remote-job API with location restrictions and canonical job URLs.
 
-Both feeds are remote-job sources, not complete coverage of onsite jobs or every job portal. The canonical provider listing is always retained. Jobicy listings are deliberately excluded from the application queue because its public feed doesn't provide a verified employer application URL. Remote OK listings are queue-eligible only when the feed explicitly provides a separate direct `apply_url`; listing-only entries are not queued.
+The adapters preserve source URLs, use bounded caches (5–60 minutes by provider), and filter by role family, target keywords/skills, and available country/location eligibility before results reach the UI. For a specific city, a job that only says “remote” without location eligibility is rejected; explicitly worldwide listings and broad provider regions are accepted only when their metadata supports it. Exact matching still depends on what each provider publishes.
 
-The local synthetic demo MCP source is disabled in the default runtime configuration and isolated in `config/mcp-servers.test.json` for CI. The Naukri and LinkedIn entries are disabled placeholders, not live integrations. They will not return portal jobs until a real, authorized MCP endpoint and its actual tool/argument schema are configured. MCP servers connected in ChatGPT or another desktop host are not automatically available to this NestJS worker.
+### Optional popular job-board connectors
+
+The worker also includes credentialed adapters for:
+
+- **Naukri, LinkedIn Jobs, Indeed, Glassdoor** — through the third-party Apify actor `openclawai/job-board-scraper`.
+- **Apna** — through the third-party Apify actor `automation-lab/apna-india-job-listings-scraper`.
+- **Adzuna** and **Jooble** — via their respective search APIs when account credentials are configured.
+
+These sources automatically enable after the relevant credentials are present in the worker's server-side `.env` and the process restarts. The Apify actors are third-party services, not official APIs for those boards, and may charge per job returned plus platform/proxy usage. They return public listings, not credentials, user profiles, or successful applications. Configure small result limits and respect applicable provider/site terms. The direct MCP slots for individual platforms remain disabled unless you supply a real endpoint, token, and actual search-tool schema.
+
+The synthetic demo MCP source is disabled in `config/mcp-servers.json` and isolated in `config/mcp-servers.test.json` for CI. MCP servers connected in ChatGPT or another desktop host are not automatically available to this worker.
 
 ## Features
 
@@ -39,7 +52,7 @@ The local synthetic demo MCP source is disabled in the default runtime configura
 
 ## Local development
 
-Use Node.js 22+, Redis 7+, and Chromium for browser workflows. The default `config/mcp-servers.json` enables live Jobicy and Remote OK sources; do not set `MCP_SERVERS_CONFIG` to the CI-only test config when you expect real results. Keep `AUTO_SUBMIT_ENABLED=false` while testing.
+Use Node.js 22+, Redis 7+, and Chromium for browser workflows. The default `config/mcp-servers.json` enables the five public sources above. Optional Adzuna, Jooble, and Apify sources activate automatically when their credentials are present. Do not set `MCP_SERVERS_CONFIG` to the CI-only test config when you expect live results. Keep `AUTO_SUBMIT_ENABLED=false` while testing.
 
 Create `.env` only if it does not already exist, then set a private `AGENT_API_KEY`:
 
@@ -107,6 +120,31 @@ npm run lint:types
 npm test -- --coverage
 npm run build
 ```
+
+### Enable major-board and India-specific sources
+
+Create or edit `.env` without overwriting any existing values. Add your Apify account API token to enable Naukri, LinkedIn Jobs, Indeed, Glassdoor, and Apna through the configured third-party actors:
+
+```dotenv
+APIFY_API_TOKEN=your-private-apify-token
+APIFY_JOB_BOARDS_SITES=naukri,linkedin,indeed,glassdoor
+APIFY_JOB_BOARDS_MAX_RESULTS=15
+APIFY_APNA_MAX_ITEMS=25
+MCP_CALL_TIMEOUT_MS=210000
+```
+
+The worker automatically enables `apify-boards` and `apify-apna` when `APIFY_API_TOKEN` is present, so you do not need to edit `config/mcp-servers.json` for this case. Restart the worker after editing `.env`. The default limits cap results to 15 per selected board and 25 Apna results per search; adjust them deliberately if you need more. Multi-board runs can take up to about three minutes, so the Apify calls have a dedicated bounded timeout.
+
+Adzuna and Jooble work similarly when their API credentials are present:
+
+```dotenv
+ADZUNA_APP_ID=your-app-id
+ADZUNA_APP_KEY=your-app-key
+ADZUNA_COUNTRY=in
+JOOBLE_API_KEY=your-jooble-key
+```
+
+Keep all these secrets in the worker's local/server environment only. Never paste them into browser code, screenshots, issues, or commits. Check the selected actor/provider pricing before enabling paid sources; public listing extraction can incur per-result and platform usage charges.
 
 ## Configure MCP servers
 
