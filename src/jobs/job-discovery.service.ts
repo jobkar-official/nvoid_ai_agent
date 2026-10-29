@@ -5,7 +5,7 @@ import { BackendSyncService } from '../common/backend-sync.service';
 import { resolveTemplate } from '../common/template-resolver';
 import { AiAgentService } from '../common/ai-agent.service';
 import { McpRegistryService } from '../mcp/mcp-registry.service';
-import { calculateMatchScore, normalizeJob, parseMcpJobResult } from './job-normalizer';
+import { calculateMatchScore, normalizeJob, parseMcpJobResult, resolveRemoteOkApplicationUrl } from './job-normalizer';
 
 export interface SearchResult {
   requestedLimit: number;
@@ -64,7 +64,7 @@ export class JobDiscoveryService {
             if (entry.server.id === 'jobicy') return { ...job, applicationUrl: undefined };
             if (entry.server.id === 'remoteok') {
               const directUrl = job.raw?.apply_url ?? job.raw?.applyUrl ?? job.raw?.application_url;
-              const applicationUrl = typeof directUrl === 'string' && /^https?:\/\//i.test(directUrl) ? directUrl : undefined;
+              const applicationUrl = resolveRemoteOkApplicationUrl(job.jobUrl, directUrl);
               return { ...job, applicationUrl, workMode: job.workMode ?? 'Remote' };
             }
             return job;
