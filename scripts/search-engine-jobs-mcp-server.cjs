@@ -59,11 +59,35 @@ function country(value) {
 function locationMatch(location, description, url, requested) {
   const target=String(requested||'').trim();
   if(/^(remote|worldwide|global|anywhere|all locations|all countries)$/i.test(target))return true;
-  const e=norm([location,description,url].join(' '));
+  const targetNorm=norm(target),locationNorm=norm(location),e=norm([location,description,url].join(' '));
   if(/\b(worldwide|global|work from anywhere|remote worldwide|all countries|anywhere in the world)\b/.test(e))return true;
-  if(e.includes(norm(target)))return true;
-  const c=country(target);if(c&&country(e)===c)return true;
-  return Boolean(c==='india'&&/\b(apac|asia pacific)\b/.test(e));
+  if(targetNorm&&e.includes(targetNorm))return true;
+  const wantedCountry=country(target),offeredCountry=country(e);
+  if(!wantedCountry||wantedCountry!==offeredCountry)return false;
+  const cities=[
+    ['bengaluru',['bengaluru','bangalore']],
+    ['delhi',['delhi','new delhi','noida','gurugram','gurgaon']],
+    ['mumbai',['mumbai','bombay']],
+    ['hyderabad',['hyderabad']],
+    ['chennai',['chennai','madras']],
+    ['pune',['pune']],
+    ['kolkata',['kolkata','calcutta']],
+    ['toronto',['toronto']],
+    ['vancouver',['vancouver']],
+    ['new york',['new york']],
+    ['san francisco',['san francisco']],
+    ['london',['london']],
+    ['manchester',['manchester']],
+    ['sydney',['sydney']],
+    ['melbourne',['melbourne']]
+  ];
+  const wantedCity=cities.find(([,aliases])=>aliases.some(alias=>targetNorm.includes(alias)));
+  if(wantedCity){
+    if(wantedCity[1].some(alias=>e.includes(alias)))return true;
+    const remote=/\b(remote|telecommute|work from home|distributed team)\b/.test(e);
+    return remote&&(locationNorm.includes(wantedCountry)||e.includes('remote '+wantedCountry));
+  }
+  return true;
 }
 function quote(value){return'"'+String(value||'').replace(/["\r\n]/g,' ').trim().slice(0,140)+'"';}
 function buildSearchQueries(profile) {
