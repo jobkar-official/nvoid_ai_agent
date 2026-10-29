@@ -87,7 +87,7 @@ export function matchesJobTitle(title: string, raw: Record<string, unknown> | un
   const targetFamily = roleFamily(target);
   const jobFamily = roleFamily(title);
   const targetWantsLeadership = /\b(manager|management|director|head|chief|vice president|vp|lead)\b/.test(target);
-  const jobIsLeadership = /\b(manager|management|director|head|chief|vice president|vp)\b/.test(normalizedTitle);
+  const jobIsLeadership = /\b(manager|management|director|head|chief|vice president|vp|team lead|tech lead|lead engineer|lead developer)\b/.test(normalizedTitle);
 
   if (targetFamily && jobFamily && targetFamily !== jobFamily) return false;
   if (jobIsLeadership && !targetWantsLeadership) return false;
