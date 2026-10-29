@@ -32,7 +32,7 @@ describe('Remote OK live source filters', () => {
     }, 'Bengaluru')).toBe(false);
   });
 
-  it('allows worldwide remote listings and clearly unknown eligibility for manual review', () => {
+  it('accepts explicit worldwide listings but rejects unknown eligibility for a specific location', () => {
     expect(remoteOkFilters.matchesLocation({
       location: 'Worldwide',
       position: 'Backend Developer'
@@ -42,7 +42,7 @@ describe('Remote OK live source filters', () => {
       location: '',
       position: 'Backend Developer',
       description: 'Work remotely with a distributed team.'
-    }, 'Bengaluru')).toBe(true);
+    }, 'Bengaluru')).toBe(false);
   });
 
   it('maps known regions consistently', () => {
