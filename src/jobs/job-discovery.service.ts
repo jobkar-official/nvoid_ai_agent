@@ -90,7 +90,7 @@ export class JobDiscoveryService {
             }
             return job;
           })
-          .filter((job) => matchesJobTitle(job.title, job.raw, profile.jobTitle))
+          .filter((job) => matchesJobTitle(job.title, job.raw, profile.jobTitle, profile.experienceYears))
           .filter((job) => matchesJobLocation(job, profile));
         return { serverId: entry.server.id, tool: entry.tool, jobs };
       } catch (error) {
