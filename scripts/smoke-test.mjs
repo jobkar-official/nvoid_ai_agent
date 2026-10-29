@@ -2,6 +2,7 @@ import 'dotenv/config';
 
 const baseUrl = (process.env.NVOID_AGENT_URL ?? 'http://127.0.0.1:3100').replace(/\/+$/, '');
 const apiKey = process.env.AGENT_API_KEY;
+const serverIds = process.env.NVOID_SMOKE_SOURCE_ID ? [process.env.NVOID_SMOKE_SOURCE_ID] : undefined;
 
 if (!apiKey) {
   console.error('AGENT_API_KEY is missing. Copy .env.example to .env and set AGENT_API_KEY first.');
@@ -52,16 +53,20 @@ try {
     body: JSON.stringify({
       profile,
       limit: 20,
-      serverIds: ['demo'],
+      ...(serverIds ? { serverIds } : {}),
       syncToBackend: false
     })
   });
 
   if (!Array.isArray(search.jobs) || search.jobs.length === 0) {
-    throw new Error('Demo job search returned no jobs. Check the demo MCP connection and its logs.');
+    const sourceSummary = Array.isArray(search.sources) ? search.sources.map((source) => source.serverId + ': ' + (source.error || (source.found + ' jobs'))).join('; ') : 'no source details returned';
+    throw new Error('Job search returned no jobs. Check enabled source configuration and provider connectivity. ' + sourceSummary);
   }
 
-  console.log(`Search smoke test passed: ${search.returnedCount} jobs from ${search.sourceCount} source(s).`);
+  console.log(`Search smoke test passed: ${search.returnedCount} jobs from ${search.sourceCount} connected source(s).`);
+  for (const source of search.sources ?? []) {
+    console.log(`Source ${source.serverId}: ${source.found} job(s)${source.error ? ' · ERROR: ' + source.error : ''}`);
+  }
   for (const job of search.jobs.slice(0, 5)) {
     console.log(`- [${job.matchScore}%] ${job.title} — ${job.company ?? 'Company not listed'} (${job.location ?? 'Location not listed'})`);
   }
@@ -75,7 +80,7 @@ try {
         searchLimit: 10,
         applyLimit: 2,
         minMatchScore: 0,
-        serverIds: ['demo'],
+        ...(serverIds ? { serverIds } : {}),
         autoSubmit: false,
         syncToBackend: false
       })
@@ -92,7 +97,7 @@ try {
     const tasks = await request('/api/applications/tasks?limit=10');
     console.log('Recent application-task state:');
     console.log(JSON.stringify(tasks, null, 2));
-    console.log('Demo application URLs point to example.com and are not real vacancies. No real job application should be submitted.');
+    console.log('Review-only workflow finished. Queued work is not proof that any application was submitted.');
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
