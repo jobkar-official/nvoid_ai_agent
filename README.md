@@ -4,9 +4,11 @@ A NestJS service for global job discovery and application orchestration. It conn
 
 This is a separate worker service. Keep your existing Next.js frontend and Spring Boot API. The worker exposes internal endpoints protected by `x-agent-api-key` and can post job/application events back to the backend.
 
-## Important integration boundary
+## Live source coverage and integration boundaries
 
-MCP servers connected in ChatGPT, a desktop MCP host, or another app are **not automatically available to this NestJS process**. Add the actual remote MCP endpoint or local stdio command and its credentials to `config/mcp-servers.json`. Every server's actual tool names and argument schema are different; the examples in that file are placeholders and must be replaced with the names exposed by your MCP servers. The worker discovers tools dynamically after connecting.
+The default `config/mcp-servers.json` enables the public Jobicy MCP endpoint for live remote-job discovery. Each search sends the candidate's target role and a supported geographic region, normalizes current results, and preserves the canonical Jobicy listing URL. Results from this public feed are remote listings and are cached per query for one hour in line with the provider's usage guidance. The public feed does not provide a verified employer application URL, so Jobicy records are searchable but are deliberately excluded from the application queue.
+
+The local synthetic demo MCP source is disabled in the default runtime configuration and isolated in `config/mcp-servers.test.json` for CI. The Naukri and LinkedIn entries are disabled placeholders, not live integrations. They will not return portal jobs until a real, authorized MCP endpoint and its actual tool/argument schema are configured. MCP servers connected in ChatGPT or another desktop host are not automatically available to this NestJS worker.
 
 ## Features
 
