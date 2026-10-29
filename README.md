@@ -39,71 +39,66 @@ The local synthetic demo MCP source is disabled in the default runtime configura
 
 ## Local development
 
+Use Node.js 22+, Redis 7+, and Chromium for browser workflows. The default `config/mcp-servers.json` enables live Jobicy and Remote OK sources; do not set `MCP_SERVERS_CONFIG` to the CI-only test config when you expect real results. Keep `AUTO_SUBMIT_ENABLED=false` while testing.
+
+Create `.env` only if it does not already exist, then set a private `AGENT_API_KEY`:
+
 ```bash
-cp .env.example .env
-npm install
+test -f .env || cp .env.example .env
+npm ci
 npx playwright install chromium
-docker compose up -d redis
+```
+
+Make sure Redis is running locally and `redis-cli ping` returns `PONG`. If Docker is unavailable, install Redis 7 using your Linux distribution's package manager and start its service. Keep `REDIS_HOST=127.0.0.1` and `REDIS_PORT=6379` for this setup.
+
+Start the worker:
+
+```bash
 npm run start:dev
 ```
 
-On a fresh Linux machine, install browser OS dependencies with:
+The API listens on port `3100` by default. Health is available without an API key at `GET /api/health`. Protected endpoints require `x-agent-api-key` with the value of `AGENT_API_KEY`.
+
+### Search the configured live sources
+
+In another terminal, run:
 
 ```bash
-npx playwright install --with-deps chromium
-```
-
-The API listens on port `3100` by default. Health is available without an API key at `GET /api/health`. All other endpoints require `x-agent-api-key` with the value of `AGENT_API_KEY`.
-
-Build and test:
-
-```bash
-npm run build
-npm test
-```
-
-## Run and test locally before connecting real job portals
-
-The default `config/mcp-servers.json` enables a local MCP source named `demo`. It returns **synthetic test listings only** so you can verify the API, MCP connection, normalization, matching, queueing and manual-review behavior without portal credentials. Its application URLs use `example.com`; they are not real job listings. Naukri and LinkedIn entries remain disabled placeholders until you supply working, authorized MCP endpoints and their actual tool names.
-
-### Docker quick start
-
-```bash
-cp .env.example .env
-```
-
-Set a private `AGENT_API_KEY` in `.env`; do not use the example value for a deployed service. Then run:
-
-```bash
-docker compose up --build -d
-curl http://127.0.0.1:3100/api/health
-npm ci
 npm run smoke:test
 ```
 
-The smoke test checks health and calls `POST /api/jobs/search` against the local demo source. It reads `AGENT_API_KEY` from `.env` and prints sample job titles with match scores. Set `NVOID_AGENT_URL` if the worker is running somewhere other than `http://127.0.0.1:3100`.
+The smoke test searches all enabled MCP sources in the worker's current configuration, prints returned listing titles and source-level errors, and reads the worker API key from `.env`. It does not use synthetic jobs unless the worker is intentionally started with `MCP_SERVERS_CONFIG=./config/mcp-servers.test.json`.
 
-To exercise the queue and browser worker as well:
+To test synthetic fixture data without polling any live provider, start the worker and smoke test with the CI-only configuration set in both processes:
+
+```bash
+MCP_SERVERS_CONFIG=./config/mcp-servers.test.json npm run start:dev
+```
+
+In another terminal:
+
+```bash
+MCP_SERVERS_CONFIG=./config/mcp-servers.test.json npm run smoke:test
+```
+
+### Docker quick start
+
+If Docker is installed, you can use Compose instead of installing Redis locally. Create `.env` only when missing, set a private `AGENT_API_KEY`, keep `AUTO_SUBMIT_ENABLED=false`, and run:
+
+```bash
+test -f .env || cp .env.example .env
+docker compose up --build -d
+curl http://127.0.0.1:3100/api/health
+npm run smoke:test
+```
+
+To exercise the review-only queue workflow as well:
 
 ```bash
 npm run smoke:test -- --workflow
 ```
 
-This mode queues up to two synthetic jobs, with `autoSubmit: false`, then prints recent task states. The browser opens only the example.com demo URLs, which have no application form; a manual-review result is expected. It does not submit a real application. Use this test before configuring a live source.
-
-### Run the API on your machine instead of Docker
-
-Use Node.js 22+, a local Redis 7 instance, and Chromium for Playwright:
-
-```bash
-cp .env.example .env
-npm ci
-npx playwright install chromium
-docker compose up -d redis
-npm run start:dev
-```
-
-In another terminal, run `npm run smoke:test`. The `AGENT_API_KEY` value in `.env` must match the header used by the smoke test. The API health endpoint does not require the key; protected routes do.
+This mode queues only eligible jobs from the selected sources with `autoSubmit: false`, then prints recent task states. A queued task is not proof that an application was submitted. Public aggregators that only supply a listing URL are not treated as direct application forms.
 
 ### Run the automated checks
 
