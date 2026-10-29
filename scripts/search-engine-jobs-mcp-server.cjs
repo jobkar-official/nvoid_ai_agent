@@ -93,7 +93,7 @@ function safeUrl(raw) {
 function isJobUrl(raw) {
   const u=safeUrl(raw);if(!u)return false;
   const h=u.hostname.toLowerCase(),p=(u.pathname+u.search).toLowerCase();
-  const path=/\/(jobs?\/|job-listings?\/|careers?\/|positions?\/|openings?\/|vacancies\/|viewjob|apply\/)/i.test(p);
+  const path=/\/(?:jobs?\/|job-listings?(?:\/|-)|careers?(?:\/|-|$)|positions?\/|openings?\/|vacancies\/|viewjob(?:\/|$)|apply\/)/i.test(p);
   const ats=/greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|smartrecruiters\.com|workable\.com|icims\.com|jobvite\.com|successfactors\.com|oraclecloud\.com|teamtailor\.com/i.test(h)&&u.pathname.split('/').filter(Boolean).length>=2;
   const domains=['linkedin.com','naukri.com','indeed.com','foundit.in','apna.co','wellfound.com','glassdoor.com','builtin.com','ziprecruiter.com','greenhouse.io','lever.co','ashbyhq.com','workdayjobs.com'];
   return path||ats||(domains.some(d=>h===d||h.endsWith('.'+d))&&u.pathname.split('/').filter(Boolean).length>=2&&!/\/(search|companies|company|blog|about|privacy|terms)(\/|$)/i.test(p));
