@@ -207,6 +207,11 @@ function matchesLocation(job, requested, remoteOnly) {
   if (isExplicitGlobalEligibility(description)) return true;
   const restriction = description.match(/(?:based in|based out of|located in|must be (?:located|based|resident) in|residing in|residing within|candidates? (?:must|should) be (?:located|based) in|only available in|available only in|position is restricted to)\s+([^.<\n]{2,70})/i);
   if (restriction) {
+    const targetCountries = countriesFor(target);
+    const allowedCountries = countriesFor(restriction[1]);
+    if (targetCountries.length && allowedCountries.length) {
+      return targetCountries.some((country) => allowedCountries.includes(country));
+    }
     const targetRegion = targetRegions[0];
     const allowedRegions = regionsFor(restriction[1]);
     if (targetRegion && allowedRegions.length) return allowedRegions.includes(targetRegion);
