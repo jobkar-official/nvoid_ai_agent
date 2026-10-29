@@ -394,7 +394,8 @@ async function fetchAllJobs(query, location) {
       const appId = process.env.ADZUNA_APP_ID;
       const appKey = process.env.ADZUNA_APP_KEY;
       if (!appId || !appKey || appId.includes('\${') || appKey.includes('\${')) throw new Error('Adzuna requires ADZUNA_APP_ID and ADZUNA_APP_KEY in the worker environment.');
-      const country = (process.env.ADZUNA_COUNTRY || 'in').toLowerCase();
+      const rawCountry = process.env.ADZUNA_COUNTRY || 'in';
+      const country = rawCountry.startsWith(String.fromCharCode(36) + '{') ? 'in' : rawCountry.toLowerCase();
       const params = new URLSearchParams({
         app_id: appId,
         app_key: appKey,
