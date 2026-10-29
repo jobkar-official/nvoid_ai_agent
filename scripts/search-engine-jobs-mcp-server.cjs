@@ -172,19 +172,19 @@ async function discover(args,limit) {
   const role=String(args.query||'').trim(),location=String(args.location||(args.countries||[]).join(', ')||'').trim();
   if(!role||!location)throw new Error('Both target job title and preferred location are required.');
   if(!process.env.BRAVE_SEARCH_API_KEY||String(process.env.BRAVE_SEARCH_API_KEY).includes('$'+'{'))throw new Error('Brave Search is disabled. Set BRAVE_SEARCH_API_KEY and restart the worker.');
-  const target=Math.min(envInt('BRAVE_SEARCH_MAX_RESULTS',500,50,1000),limit),queries=buildSearchQueries({query:role,location,skills:args.skills,keywords:args.keywords}),pageCap=envInt('BRAVE_SEARCH_MAX_PAGES_PER_QUERY',10,1,10),requestCap=envInt('BRAVE_SEARCH_MAX_REQUESTS',60,1,120);
+  const target=Math.min(envInt('BRAVE_SEARCH_MAX_RESULTS',500,50,1000),limit),queries=buildSearchQueries({query:role,location,skills:args.skills,keywords:args.keywords}),pageCap=envInt('BRAVE_SEARCH_MAX_PAGES_PER_QUERY',10,1,10),requestCap=envInt('BRAVE_SEARCH_MAX_REQUESTS',120,1,120);
   const candidateMap=new Map();let calls=0,indexed=0,failures=0,more=false;
   for(let offset=0;offset<pageCap&&calls<requestCap;offset++){
     const tasks=queries.slice(0,Math.min(queries.length,requestCap-calls)).map(q=>({q,offset}));
-    const batch=await concurrent(tasks,envInt('BRAVE_SEARCH_CONCURRENCY',6,1,10),async task=>({task,page:await searchPage(task.q,task.offset,searchCountry(location))}));
+    const batch=await concurrent(tasks,envInt('BRAVE_SEARCH_CONCURRENCY',10,1,10),async task=>({task,page:await searchPage(task.q,task.offset,searchCountry(location))}));
     calls+=tasks.length;
     for(const item of batch){if(!item?.page){failures++;continue;}indexed+=item.page.results.length;more=more||item.page.more;
       for(const r of item.page.results){const c=candidateFromResult(r,role,location,item.task.q);if(c&&!candidateMap.has(c.url))candidateMap.set(c.url,c);}
     }
     if(candidateMap.size>=target*1.2)break;
   }
-  const candidates=[...candidateMap.values()],maxFetch=Math.min(envInt('BRAVE_SEARCH_MAX_PAGE_FETCHES',120,0,500),candidates.length);
-  const crawled=await concurrent(candidates.slice(0,maxFetch),envInt('BRAVE_SEARCH_PAGE_CRAWL_CONCURRENCY',12,1,20),async c=>({candidate:c,page:await crawl(c.url)}));
+  const candidates=[...candidateMap.values()],maxFetch=Math.min(envInt('BRAVE_SEARCH_MAX_PAGE_FETCHES',250,0,500),candidates.length);
+  const crawled=await concurrent(candidates.slice(0,maxFetch),envInt('BRAVE_SEARCH_PAGE_CRAWL_CONCURRENCY',20,1,20),async c=>({candidate:c,page:await crawl(c.url)}));
   const unique=new Map();let structured=0,metadata=0;
   for(const item of crawled){if(!item)continue;
     if(item.page?.postings?.length){let accepted=false;
