@@ -3,6 +3,7 @@ const apifyBoards = require('../../scripts/apify-job-boards-mcp-server.cjs') as 
   matchesLocation: (job: Record<string, unknown>, requested: string, remoteOnly: boolean) => boolean;
   roleFamily: (value: string) => string | undefined;
   mapItem: (item: Record<string, unknown>) => Record<string, unknown>;
+  displayLocation: (item: Record<string, unknown>) => string;
 };
 
 describe('Apify multi-board job source', () => {
@@ -63,6 +64,16 @@ describe('Apify multi-board job source', () => {
     expect(job.postedAt).toBe('2026-10-29');
     expect(job.salaryMin).toBe(100000);
     expect(job.salaryMax).toBe(150000);
+  });
+
+  it('shows the job eligibility provided by the board actor', () => {
+    expect(apifyBoards.displayLocation({
+      location: 'Remote',
+      locationRestrictions: ['India', 'APAC']
+    })).toBe('Remote · India APAC');
+    expect(apifyBoards.displayLocation({
+      description: 'Remote job available worldwide.'
+    })).toBe('Worldwide');
   });
 
   it('preserves Apna as a distinct provider rather than labeling it as an aggregator', () => {
