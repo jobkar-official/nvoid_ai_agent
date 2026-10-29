@@ -53,9 +53,17 @@ export class JobDiscoveryService {
               count: 200,
             }
           : args ?? {};
+        const sourceArgs = entry.server.id === 'remoteok'
+          ? {
+              ...(args ?? {}),
+              query: [profile.jobTitle, ...(profile.keywords ?? []).slice(0, 3), ...(profile.skills ?? []).slice(0, 4)].filter(Boolean).join(' '),
+              location: profile.location ?? profile.countries?.join(', ') ?? 'Worldwide',
+              limit: Math.min(100, requestedLimit),
+            }
+          : toolArgs;
         const result = entry.server.id === 'jobicy'
-          ? await this.callJobicyWithCache(entry.server.id, entry.tool, toolArgs)
-          : await this.mcpRegistry.callTool(entry.server.id, entry.tool, toolArgs);
+          ? await this.callJobicyWithCache(entry.server.id, entry.tool, sourceArgs)
+          : await this.mcpRegistry.callTool(entry.server.id, entry.tool, sourceArgs);
         const rawJobs = parseMcpJobResult(result);
         const jobs = rawJobs
           .map((raw) => normalizeJob(raw, entry.server.id, profile))
