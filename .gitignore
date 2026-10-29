@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+playwright-report/
+test-results/
+artifacts/
+*.log
+.DS_Store
+/private-resumes/
+/artifacts/

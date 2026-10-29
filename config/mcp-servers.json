@@ -1,0 +1,38 @@
+[
+  {
+    "id": "naukri",
+    "name": "Naukri MCP",
+    "enabled": false,
+    "transport": "http",
+    "url": "https://REPLACE-WITH-YOUR-NAUKRI-MCP-HOST/mcp",
+    "headers": {
+      "Authorization": "Bearer ${NAUKRI_MCP_TOKEN}"
+    },
+    "jobSearch": {
+      "tool": "REPLACE_WITH_ACTUAL_SEARCH_TOOL_NAME",
+      "arguments": {
+        "query": { "$profile": "jobTitle" },
+        "location": { "$profile": "location" },
+        "limit": { "$context": "limit" }
+      }
+    }
+  },
+  {
+    "id": "linkedin",
+    "name": "LinkedIn MCP",
+    "enabled": false,
+    "transport": "http",
+    "url": "https://REPLACE-WITH-YOUR-LINKEDIN-MCP-HOST/mcp",
+    "headers": {
+      "Authorization": "Bearer ${LINKEDIN_MCP_TOKEN}"
+    },
+    "jobSearch": {
+      "tool": "REPLACE_WITH_ACTUAL_SEARCH_TOOL_NAME",
+      "arguments": {
+        "keywords": { "$profile": "jobTitle" },
+        "location": { "$profile": "location" },
+        "count": { "$context": "limit" }
+      }
+    }
+  }
+]
