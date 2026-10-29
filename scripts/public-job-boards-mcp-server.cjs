@@ -212,6 +212,15 @@ function countriesFor(value) {
 function isExplicitGlobalEligibility(value) {
   return /\b(available worldwide|worldwide eligible|work from anywhere|remote from anywhere|remote worldwide|anywhere in the world|open to candidates worldwide|eligible in all countries|remote from any location)\b/i.test(String(value || ''));
 }
+function displayLocation(job, remoteFallback = false) {
+  const primary = text(job.location || job.city || job.job_location);
+  const restriction = text(job.locationRestrictions || job.location_restrictions || job.allowedCountries || job.allowed_countries || job.eligibleLocations || job.eligible_locations || job.location_country || job.country);
+  if (primary && !/^(remote|remote only|remote eligible|remote · eligibility not stated)$/i.test(primary)) return primary;
+  if (restriction) return primary ? primary + ' · ' + restriction : restriction;
+  if (isExplicitGlobalEligibility(job.description || job.excerpt || job.summary)) return 'Worldwide';
+  return primary || (remoteFallback ? 'Remote · eligibility not stated' : '');
+}
+
 
 function isGlobal(value) {
   return /\b(worldwide|anywhere|global|all countries|work from anywhere|remote worldwide|world wide)\b/i.test(text(value));
@@ -301,7 +310,7 @@ function mapJob(job) {
       id: text(job.id || job.link),
       title: text(job.title),
       company: text(job.company),
-      location: text(job.location),
+      location: displayLocation(job, false),
       description: text(job.snippet || job.description),
       tags: text(job.type || job.category),
       employmentType: text(job.type),
@@ -350,7 +359,7 @@ function mapJob(job) {
     id: text(job.guid || job.id || job.slug),
     title: text(job.title),
     company: text(job.companyName || job.company_name || job.company),
-    location: Array.isArray(job.locationRestrictions) ? job.locationRestrictions.join(', ') : text(job.location || job.locationRestrictions || 'Remote · eligibility not stated'),
+    location: displayLocation(job, true),
     country: Array.isArray(job.locationRestrictions) ? job.locationRestrictions.join(', ') : text(job.country),
     description: text(job.description || job.excerpt),
     tags: [job.categories, job.parentCategories, job.seniority].map(text).filter(Boolean).join(' '),
@@ -530,4 +539,4 @@ function start() {
 }
 
 if (require.main === module) start();
-module.exports = { matchesRole, matchesLocation, roleFamily, regionFor, countriesFor, mapJob };
+module.exports = { matchesRole, matchesLocation, roleFamily, regionFor, countriesFor, mapJob, displayLocation };
