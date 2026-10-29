@@ -49,6 +49,7 @@ jobs:
       - run: npm run build
       - run: node --check scripts/remoteok-mcp-server.cjs
       - run: node --check scripts/public-job-boards-mcp-server.cjs
+      - run: node --check scripts/apify-job-boards-mcp-server.cjs
       - run: node --check scripts/live-source-smoke.mjs
       - name: Start worker and verify live provider results
         shell: bash
