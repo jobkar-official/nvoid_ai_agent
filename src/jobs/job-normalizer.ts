@@ -98,6 +98,22 @@ export function normalizeJob(rawValue: unknown, source: string, profile: JobProf
   };
 }
 
+export function resolveRemoteOkApplicationUrl(listingUrl: string | undefined, directApplyUrl: unknown): string | undefined {
+  if (typeof directApplyUrl !== 'string') return undefined;
+  const normalized = normalizeUrl(directApplyUrl);
+  if (!normalized) return undefined;
+  try {
+    const target = new URL(normalized);
+    const listing = listingUrl ? new URL(listingUrl) : undefined;
+    const host = target.hostname.toLowerCase();
+    if (host === 'remoteok.com' || host.endsWith('.remoteok.com')) return undefined;
+    if (listing && target.href.replace(/\/$/, '') === listing.href.replace(/\/$/, '')) return undefined;
+    return normalized;
+  } catch {
+    return undefined;
+  }
+}
+
 export function calculateMatchScore(raw: Record<string, unknown>, title: string, location: string | undefined, profile: JobProfile): { score: number; reasons: string[] } {
   let score = 25;
   const reasons: string[] = [];
