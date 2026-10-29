@@ -14,7 +14,8 @@
     "start:prod": "node dist/main.js",
     "lint:types": "tsc --noEmit",
     "test": "jest --runInBand",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "smoke:test": "node scripts/smoke-test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.0.0",
