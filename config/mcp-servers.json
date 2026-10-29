@@ -493,5 +493,169 @@
         }
       }
     }
+  },
+  {
+    "id": "remotive",
+    "name": "Remotive Live Remote Jobs",
+    "enabled": true,
+    "transport": "stdio",
+    "command": "node",
+    "args": [
+      "./scripts/public-job-boards-mcp-server.cjs",
+      "remotive"
+    ],
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        },
+        "skills": {
+          "$profile": "skills"
+        },
+        "keywords": {
+          "$profile": "keywords"
+        }
+      }
+    }
+  },
+  {
+    "id": "weworkremotely",
+    "name": "We Work Remotely RSS Jobs",
+    "enabled": true,
+    "transport": "stdio",
+    "command": "node",
+    "args": [
+      "./scripts/public-job-boards-mcp-server.cjs",
+      "weworkremotely"
+    ],
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        },
+        "skills": {
+          "$profile": "skills"
+        },
+        "keywords": {
+          "$profile": "keywords"
+        }
+      }
+    }
+  },
+  {
+    "id": "greenhouse",
+    "name": "Greenhouse Company Career Boards",
+    "enabled": false,
+    "transport": "stdio",
+    "command": "node",
+    "args": [
+      "./scripts/public-job-boards-mcp-server.cjs",
+      "greenhouse"
+    ],
+    "env": {
+      "GREENHOUSE_BOARDS": "${GREENHOUSE_BOARDS}"
+    },
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        },
+        "skills": {
+          "$profile": "skills"
+        },
+        "keywords": {
+          "$profile": "keywords"
+        }
+      }
+    }
+  },
+  {
+    "id": "lever",
+    "name": "Lever Company Career Boards",
+    "enabled": false,
+    "transport": "stdio",
+    "command": "node",
+    "args": [
+      "./scripts/public-job-boards-mcp-server.cjs",
+      "lever"
+    ],
+    "env": {
+      "LEVER_SITES": "${LEVER_SITES}"
+    },
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        },
+        "skills": {
+          "$profile": "skills"
+        },
+        "keywords": {
+          "$profile": "keywords"
+        }
+      }
+    }
+  },
+  {
+    "id": "ashby",
+    "name": "Ashby Company Career Boards",
+    "enabled": false,
+    "transport": "stdio",
+    "command": "node",
+    "args": [
+      "./scripts/public-job-boards-mcp-server.cjs",
+      "ashby"
+    ],
+    "env": {
+      "ASHBY_BOARDS": "${ASHBY_BOARDS}"
+    },
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        },
+        "skills": {
+          "$profile": "skills"
+        },
+        "keywords": {
+          "$profile": "keywords"
+        }
+      }
+    }
   }
 ]
