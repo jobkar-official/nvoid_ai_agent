@@ -24,8 +24,8 @@ const SOURCE_CONFIG = {
   }
 };
 
-if (!SOURCE_CONFIG[SOURCE]) {
-  process.stderr.write('Set source to arbeitnow, workingnomads, or himalayas in the MCP command arguments.\n');
+if (!SOURCE_CONFIG[SOURCE] && require.main === module) {
+  process.stderr.write('Set source to arbeitnow, workingnomads, himalayas, adzuna, or jooble in the MCP command arguments.\\n');
   process.exit(2);
 }
 
