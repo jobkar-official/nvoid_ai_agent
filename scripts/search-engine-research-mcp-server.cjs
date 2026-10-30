@@ -191,7 +191,7 @@ function normalizeOrganic(items, query) {
       publishedDate: String(item.date || item.page_age || ''),
       position: Number(item.position || index + 1),
       domain: url.hostname,
-      searchQuery: query,
+      searchQuery: String(item._nvoidSearchQuery || query),
       source: 'Serper Google Search',
       crawled: false,
     }];
@@ -204,21 +204,32 @@ async function searchWeb(args) {
   const apiKey = String(process.env.SERPER_API_KEY || '').trim();
   if (!apiKey || apiKey.includes('${')) throw new Error('Set SERPER_API_KEY in the worker .env to enable public web research.');
   const limit = Math.min(1000, Math.max(1, Number.parseInt(args.limit, 10) || 100));
+  const requestedVariants = Array.isArray(args.queries) ? args.queries : [];
+  const queries = [...new Set([query, ...requestedVariants
+    .filter((value) => typeof value === 'string')
+    .map((value) => value.trim())
+    .filter((value) => value.length >= 3)
+  ])].slice(0, 8);
   const pageLimit = integerEnv('NVOID_WEB_SEARCH_MAX_PAGES', 10, 1, 30);
-  const pages = Math.min(pageLimit, Math.ceil(limit / 10));
+  const pagesPerQuery = Math.min(pageLimit, Math.ceil(limit / 10));
+  const maxRequests = integerEnv('NVOID_WEB_SEARCH_MAX_REQUESTS', 72, 1, 240);
+  const requestedPages = queries.flatMap((searchQuery) => Array.from({ length: pagesPerQuery }, (_, page) => ({ query: searchQuery, page: page + 1 })));
+  const requests = requestedPages.slice(0, maxRequests);
   const country = String(args.country || 'IN').toLowerCase().slice(0, 2);
-  const pageResponses = await runConcurrent(Array.from({ length: pages }, (_, page) => page), 5, async (page) => {
+  const pageResponses = await runConcurrent(requests, 6, async (request) => {
     const response = await fetch('https://google.serper.dev/search', {
       method: 'POST',
       headers: { accept: 'application/json', 'content-type': 'application/json', 'X-API-KEY': apiKey, 'user-agent': USER_AGENT },
-      body: JSON.stringify({ q: query, gl: country, hl: 'en', num: 10, page: page + 1 }),
+      body: JSON.stringify({ q: request.query, gl: country, hl: 'en', num: 10, page: request.page }),
       signal: AbortSignal.timeout(20000),
     });
     if (!response.ok) throw new Error('Serper returned HTTP ' + response.status + '. Check the API key, credits and rate limits.');
-    return response.json();
+    return { ...request, data: await response.json() };
   });
   const searchErrors = pageResponses.filter((item) => item?.error);
-  const organic = pageResponses.flatMap((item) => Array.isArray(item?.organic) ? item.organic : []);
+  const organic = pageResponses.flatMap((item) => Array.isArray(item?.data?.organic)
+    ? item.data.organic.map((result) => ({ ...result, _nvoidSearchQuery: item.query }))
+    : []);
   const candidates = normalizeOrganic(organic, query).slice(0, limit);
   const crawlEnabled = args.crawlPages !== false;
   const crawlBudget = integerEnv('NVOID_WEB_CRAWL_MAX_PAGES', 25, 0, 100);
@@ -235,14 +246,19 @@ async function searchWeb(args) {
     if (page?.error) fetchErrors.push({ url: candidate.url, error: page.error });
     return candidate;
   });
+  const requestBudgetReached = requestedPages.length > requests.length;
+  const providerResultCapReached = candidates.length >= Math.min(limit, requests.length * 10) && candidates.length < limit;
   return {
     records,
     searchReport: {
       provider: 'Serper Google Search API',
       query,
-      pagesRequested: pages,
-      pagesSucceeded: pages - searchErrors.length,
-      failedSearchPages: searchErrors.length,
+      searchQueries: queries,
+      searchQueriesRequested: queries.length,
+      searchRequestsRequested: requestedPages.length,
+      searchRequestsExecuted: requests.length,
+      searchRequestsSucceeded: requests.length - searchErrors.length,
+      failedSearchRequests: searchErrors.length,
       indexedResults: organic.length,
       uniqueSearchResults: candidates.length,
       publicPagesAttempted: crawlCount,
@@ -250,19 +266,20 @@ async function searchWeb(args) {
       failedPageFetches: fetchErrors.length,
       pageFetchErrors: fetchErrors.slice(0, 30),
       recordLimit: limit,
-      providerPageBudgetReached: pages >= pageLimit && candidates.length >= pages * 10 && candidates.length < limit,
-      truncated: candidates.length >= pages * 10 && candidates.length < limit,
+      requestBudgetReached,
+      providerResultCapReached,
+      truncated: requestBudgetReached || providerResultCapReached,
     },
   };
 }
-
 const tools = [{
   name: 'search_web',
   description: 'Search the public web through Google-indexed results with support for Google dork operators such as site:, inurl:, intitle:, exact phrases and OR. Paginates results and enriches results by fetching accessible public HTML/text pages. Returns actual URLs, snippets, titles, page metadata and extracted page text. Does not log in, bypass access controls or crawl private networks.',
   inputSchema: {
     type: 'object',
     properties: {
-      query: { type: 'string', description: 'Natural language query or a complete Google query including dork operators.' },
+      query: { type: 'string', description: 'Original research question or primary Google query including dork operators.' },
+      queries: { type: 'array', items: { type: 'string' }, maxItems: 8, description: 'Optional complementary query variants, including focused Google dork operators, for wider coverage.' },
       limit: { type: 'integer', minimum: 1, maximum: 1000, description: 'Maximum unique search result records to return.' },
       country: { type: 'string', description: 'Two-letter country code for regional search.' },
       crawlPages: { type: 'boolean', description: 'Fetch and extract publicly accessible result pages. Defaults to true.' },
