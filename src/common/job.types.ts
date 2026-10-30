@@ -35,6 +35,7 @@ export interface NormalizedJob {
   location?: string;
   country?: string;
   description?: string;
+  salary?: string;
   jobUrl?: string;
   applicationUrl?: string;
   employmentType?: string;
