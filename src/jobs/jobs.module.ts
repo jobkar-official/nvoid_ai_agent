@@ -10,6 +10,6 @@ import { JobDiscoveryService } from './job-discovery.service';
   imports: [McpModule],
   controllers: [JobsController],
   providers: [JobDiscoveryService, BackendSyncService, AiAgentService, AgentApiKeyGuard],
-  exports: [JobDiscoveryService],
+  exports: [JobDiscoveryService, AiAgentService],
 })
 export class JobsModule {}
