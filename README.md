@@ -129,7 +129,7 @@ SERPER_SEARCH_PAGE_CRAWL_CONCURRENCY=20
 MAX_SEARCH_RESULTS=1000
 ```
 
-`POST /api/jobs/search` defaults to 1,000 and permits configured limits up to 1,000. The web index returns bounded pages per request, so this crawler fans out over multiple role/location queries. More requests can improve recall, at higher API usage and runtime. Read `searchReport` to see the actual count and whether the requested target was reached.
+`POST /api/jobs/search` defaults to 1,000 and permits configured limits up to 1,000. By default, the crawler runs up to 36 role/location/source query variants and paginates up to 72 successful Serper requests, then fetches up to 250 discovered public pages. The `searchReport` includes URL/role/location rejection counts and the mix of employment, government recruitment and early-career/tender opportunities. Increase query/request budgets deliberately because each successful Serper query consumes credits.
 
 ### Run the automated checks
 
