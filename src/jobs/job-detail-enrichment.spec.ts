@@ -1,4 +1,4 @@
-import { buildJobDetailArguments, extractSearchId, isJobDetailTool } from './job-discovery.service';
+import { buildJobDetailArguments, extractSearchId, isJobDetailTool, parseJobDataLakeDetailResult, parseJobDataLakeSearchResult } from './job-discovery.service';
 import type { JobProfile, NormalizedJob } from '../common/job.types';
 
 const profile: JobProfile = {
@@ -22,6 +22,72 @@ const job: NormalizedJob = {
 };
 
 describe('job detail MCP lookup helpers', () => {
+
+  it('parses JobDataLake text search cards into normalized listing records', () => {
+    const jobs = parseJobDataLakeSearchResult({
+      content: [{
+        type: 'text',
+        text: [
+          '📊 498/500 free calls remaining today',
+          '',
+          'Found 1,234 jobs (showing 1):',
+          '',
+          '1. **Senior Business Development Manager** at Example Corp',
+          '   Noida, India | hybrid | $120k - $150k',
+          '   Skills: Enterprise Sales, Partnerships, CRM',
+          '   Apply: https://careers.example.com/jobs/123',
+          '   ID: example-senior-bdm-a1b2',
+        ].join('\n'),
+      }],
+    });
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      id: 'example-senior-bdm-a1b2',
+      job_handle: 'example-senior-bdm-a1b2',
+      title: 'Senior Business Development Manager',
+      company: 'Example Corp',
+      location: 'Noida, India',
+      workMode: 'hybrid',
+      salary: '$120k - $150k',
+      url: 'https://careers.example.com/jobs/123',
+    });
+  });
+
+  it('parses the full JobDataLake job detail response', () => {
+    const details = parseJobDataLakeDetailResult({
+      content: [{
+        type: 'text',
+        text: [
+          '**Senior Business Development Manager** at Example Corp',
+          '',
+          'Location: Noida, India',
+          'Salary: $120k - $150k',
+          'Seniority: Senior, Manager',
+          'Skills: Enterprise Sales, Partnerships, CRM',
+          'Type: Full-time',
+          'Apply: https://careers.example.com/jobs/123',
+          '',
+          '---',
+          '',
+          'Own strategic partnerships and enterprise customer growth.',
+        ].join('\n'),
+      }],
+    });
+
+    expect(details).toHaveLength(1);
+    expect(details[0]).toMatchObject({
+      title: 'Senior Business Development Manager',
+      company: 'Example Corp',
+      location: 'Noida, India',
+      salary: '$120k - $150k',
+      seniority: 'Senior, Manager',
+      employment_type: 'Full-time',
+      applicationUrl: 'https://careers.example.com/jobs/123',
+      description: 'Own strategic partnerships and enterprise customer growth.',
+    });
+  });
+
   it('extracts a JobSpy search id from structured MCP content', () => {
     expect(extractSearchId({
       structuredContent: {
