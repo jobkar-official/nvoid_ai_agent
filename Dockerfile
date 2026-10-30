@@ -30,5 +30,7 @@ ENV NODE_ENV=production
 ENV UV_LINK_MODE=copy
 ENV UV_CACHE_DIR=/root/.cache/uv
 
+RUN uvx mcp-jobspy@latest --help && uvx linkedin-mcp-zero --help && /usr/local/bin/openings-mcp --version
+
 EXPOSE 3100
 CMD ["npm", "run", "start:prod"]
