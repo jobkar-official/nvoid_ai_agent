@@ -259,7 +259,7 @@ function normalizeSearchResponse(data) {
       description: clean(item?.snippet || item?.description || ''),
       snippet: clean(item?.snippet || item?.description || ''),
       page_age: clean(item?.date || item?.page_age || ''),
-      profile: { name: domain, long_name: domain },
+      profile: { name: '', long_name: domain },
       extra_snippets: []
     };
   }).filter((item) => item.url) : [];
