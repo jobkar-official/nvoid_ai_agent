@@ -35,6 +35,7 @@ jobs:
       - run: node --check scripts/remoteok-mcp-server.cjs
       - run: node --check scripts/public-job-boards-mcp-server.cjs
       - run: node --check scripts/search-engine-jobs-mcp-server.cjs
+      - run: node --check scripts/search-engine-research-mcp-server.cjs
       - run: node --check scripts/apify-job-boards-mcp-server.cjs
       - run: node --check scripts/smoke-test.mjs
       - run: npm run lint:types
