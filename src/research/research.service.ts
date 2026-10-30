@@ -294,11 +294,12 @@ export class ResearchService {
 }
 
 export function isReadOnlyResearchTool(tool: ResearchTool): boolean {
-  const identity = (tool.name + ' ' + (tool.description ?? '')).trim();
-  if (MUTATING_TOOL_PATTERN.test(tool.name) || MUTATING_TOOL_PATTERN.test(identity)) return false;
+  const normalizedName = tool.name.replace(/([a-z0-9])([A-Z])/g, '$1_$2');
+  const identity = (normalizedName + ' ' + (tool.description ?? '')).trim();
+  if (MUTATING_TOOL_PATTERN.test(normalizedName) || MUTATING_TOOL_PATTERN.test(identity)) return false;
   if (tool.annotations?.destructiveHint === true || tool.annotations?.readOnlyHint === false) return false;
   if (tool.annotations?.readOnlyHint === true) return true;
-  return READ_TOOL_PATTERN.test(tool.name);
+  return READ_TOOL_PATTERN.test(normalizedName);
 }
 
 export function inferResearchArguments(
@@ -402,7 +403,8 @@ function buildHeuristicPlan(
   const candidates = tools.map((entry) => {
     const text = (entry.tool.name + ' ' + (entry.tool.description ?? '') + ' ' + entry.serverName).toLowerCase();
     const overlap = queryTerms.filter((term) => text.includes(term)).length;
-    const searchAction = READ_TOOL_PATTERN.test(entry.tool.name) ? 4 : 0;
+    const normalizedName = entry.tool.name.replace(/([a-z0-9])([A-Z])/g, '$1_$2');
+    const searchAction = READ_TOOL_PATTERN.test(normalizedName) ? 4 : 0;
     return { entry, score: overlap * 3 + searchAction };
   }).sort((a, b) => b.score - a.score || a.entry.serverId.localeCompare(b.entry.serverId));
   const counts = new Map<string, number>();
