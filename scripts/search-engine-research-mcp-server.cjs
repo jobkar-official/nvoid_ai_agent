@@ -198,6 +198,25 @@ function normalizeOrganic(items, query) {
   });
 }
 
+function buildDorkQueries(query) {
+  const phrase = String(query || '').replace(/["']/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 180);
+  if (!phrase || /\\b(site|inurl|intitle|filetype|before|after):/i.test(phrase)) return [];
+  const words = phrase.split(/\\s+/).filter((word) => word.length > 2 && !/^(the|and|for|with|from|into|near|around|about)$/i.test(word));
+  if (words.length === 0) return [];
+  const lead = words.slice(0, 3).join(' ');
+  const variants = [
+    '"' + phrase + '"',
+    'intitle:"' + lead + '"',
+    'inurl:' + words[0].toLowerCase() + ' "' + phrase + '"',
+    'filetype:pdf "' + phrase + '"',
+  ];
+  if (/\\b(job|jobs|hiring|career|vacanc(?:y|ies)|recruitment|opening|employment)\\b/i.test(phrase)) {
+    variants.push('site:linkedin.com/jobs "' + phrase + '"');
+    variants.push('site:naukri.com "' + phrase + '"');
+  }
+  return [...new Set(variants)].filter((value) => value.toLowerCase() !== String(query).trim().toLowerCase()).slice(0, 7);
+}
+
 async function searchWeb(args) {
   const query = String(args.query || '').trim();
   if (query.length < 3) throw new Error('A research query of at least three characters is required.');
@@ -208,12 +227,15 @@ async function searchWeb(args) {
   const queries = [...new Set([query, ...requestedVariants
     .filter((value) => typeof value === 'string')
     .map((value) => value.trim())
-    .filter((value) => value.length >= 3)
+    .filter((value) => value.length >= 3),
+    ...buildDorkQueries(query),
   ])].slice(0, 8);
   const pageLimit = integerEnv('NVOID_WEB_SEARCH_MAX_PAGES', 10, 1, 30);
   const pagesPerQuery = Math.min(pageLimit, Math.ceil(limit / 10));
   const maxRequests = integerEnv('NVOID_WEB_SEARCH_MAX_REQUESTS', 30, 1, 240);
-  const requestedPages = queries.flatMap((searchQuery) => Array.from({ length: pagesPerQuery }, (_, page) => ({ query: searchQuery, page: page + 1 })));
+  const requestedPages = Array.from({ length: pagesPerQuery }, (_, page) =>
+    queries.map((searchQuery) => ({ query: searchQuery, page: page + 1 })),
+  ).flat();
   const requests = requestedPages.slice(0, maxRequests);
   const country = String(args.country || 'IN').toLowerCase().slice(0, 2);
   const pageResponses = await runConcurrent(requests, 6, async (request) => {
@@ -341,4 +363,4 @@ function start() {
 }
 
 if (require.main === module) start();
-module.exports = { searchWeb, normalizeOrganic, extractPage, htmlText, publicUrl };
+module.exports = { searchWeb, normalizeOrganic, extractPage, htmlText, publicUrl, buildDorkQueries };
