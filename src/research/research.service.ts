@@ -327,7 +327,7 @@ export function inferResearchArguments(
   for (const [name, property] of Object.entries(properties)) {
     const compact = name.toLowerCase().replace(/[^a-z0-9]/g, '');
     let value: unknown;
-    if (/^(q|query|querytext|search|searchtext|searchterm|term|keyword|keywords|text|input|prompt|question|topic|subject|jobtitle|role|position)$/.test(compact)) {
+    if (/^(q|query|queries|querytext|queryvariants|search|searches|searchqueries|searchtext|searchterm|term|keyword|keywords|text|input|prompt|question|topic|subject|jobtitle|role|position)$/.test(compact)) {
       value = property.type === 'array' ? [query] : query;
     } else if (/^(limit|count|maxresults|maxrecords|pagesize|perpage|take|top|numresults|resultlimit)$/.test(compact)) {
       value = maxRecords;
