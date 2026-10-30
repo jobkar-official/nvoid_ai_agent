@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsInt,
@@ -143,6 +144,7 @@ export class SearchJobsDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMinSize(1)
   @ArrayMaxSize(50)
   @IsString({ each: true })
   serverIds?: string[];
