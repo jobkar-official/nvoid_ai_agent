@@ -234,7 +234,7 @@ export class ResearchService {
       for (const value of execution.records) {
         const object = asRecord(value);
         if (!object) continue;
-        const key = recordKey(object);
+        const key = recordKey(object, execution.call.serverId);
         if (unique.has(key)) {
           duplicatesRemoved += 1;
           continue;
@@ -263,15 +263,19 @@ export class ResearchService {
     }
 
     const records = [...unique.values()];
-    const perConnector = connectedCatalog
-      .filter((server) => selectedServers.size === 0 || selectedServers.has(server.serverId))
-      .map((server) => {
-        const sourceCalls = calls.filter((call) => call.serverId === server.serverId);
+    const perConnector = statuses
+      .filter((status) => selectedServers.size === 0 || selectedServers.has(status.id))
+      .map((status) => {
+        const server = connectedCatalog.find((entry) => entry.serverId === status.id);
+        const sourceCalls = calls.filter((call) => call.serverId === status.id);
         return {
-          serverId: server.serverId,
-          serverName: server.serverName,
-          discoveredTools: server.tools.length,
-          readOnlyTools: server.tools.filter(isReadOnlyResearchTool).length,
+          serverId: status.id,
+          serverName: status.name,
+          enabled: status.enabled,
+          connected: status.connected,
+          connectionError: status.error,
+          discoveredTools: server?.tools.length ?? 0,
+          readOnlyTools: server?.tools.filter(isReadOnlyResearchTool).length ?? 0,
           callsSucceeded: sourceCalls.filter((call) => call.status === 'success').length,
           callsFailed: sourceCalls.filter((call) => call.status === 'failed').length,
           recordsReturned: sourceCalls.reduce((total, call) => total + call.recordsReturned, 0),
@@ -283,8 +287,9 @@ export class ResearchService {
       generatedAt: new Date().toISOString(),
       planner,
       report: {
-        connectedServers: connectedCatalog.length,
-        toolsDiscovered: connectedCatalog.reduce((total, server) => total + server.tools.length, 0),
+        configuredServers: perConnector.length,
+        connectedServers: perConnector.filter((connector) => connector.connected).length,
+        toolsDiscovered: perConnector.reduce((total, connector) => total + connector.discoveredTools, 0),
         readOnlyToolsDiscovered: safeTools.length,
         plannedCalls: plans.length,
         successfulCalls: calls.filter((call) => call.status === 'success').length,
@@ -330,7 +335,7 @@ export function inferResearchArguments(
       value = property.type === 'array' ? [query] : query;
     } else if (/^(limit|count|maxresults|maxrecords|pagesize|perpage|take|top|numresults|resultlimit)$/.test(compact)) {
       value = maxRecords;
-    } else if (/^(location|city|region|geo|geography|place|country|countries)$/.test(compact) && location) {
+    } else if (/^(location|city|region|geo|geography|place)$/.test(compact) && location) {
       value = property.type === 'array' ? [location] : location;
     }
     if (value !== undefined) {
@@ -508,18 +513,18 @@ function tokenize(value: string): string[] {
   return [...new Set(value.toLowerCase().split(/[^a-z0-9+#.]+/).filter((term) => term.length > 2))].slice(0, 40);
 }
 
-function recordKey(record: Record<string, unknown>): string {
+function recordKey(record: Record<string, unknown>, serverId: string): string {
   const url = stringField(record, ['url', 'jobUrl', 'job_url', 'href', 'permalink', 'link']);
   if (url) return 'url:' + normalizeUrl(url);
-  const id = stringField(record, ['id', '_id', 'uuid', 'jobId', 'job_id', 'recordId']);
-  if (id) return 'id:' + id.toLowerCase();
   const email = stringField(record, ['email', 'emailAddress']);
   if (email) return 'email:' + email.toLowerCase();
   const title = stringField(record, ['title', 'name', 'subject', 'headline']);
   const company = stringField(record, ['company', 'companyName', 'organization', 'employer']);
   const location = stringField(record, ['location', 'city', 'country']);
   if (title || company) return 'text:' + [title, company, location].map((part) => (part ?? '').toLowerCase().trim()).join('|');
-  return 'json:' + JSON.stringify(boundValue(record)).slice(0, 2000);
+  const id = stringField(record, ['id', '_id', 'uuid', 'jobId', 'job_id', 'recordId']);
+  if (id) return 'id:' + serverId.toLowerCase() + ':' + id.toLowerCase();
+  return 'json:' + serverId.toLowerCase() + ':' + JSON.stringify(boundValue(record)).slice(0, 2000);
 }
 
 function normalizeUrl(value: string): string {
