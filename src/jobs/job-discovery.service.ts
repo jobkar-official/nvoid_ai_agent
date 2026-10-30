@@ -335,11 +335,15 @@ function parseSearchReport(result: unknown, serverId: string): SearchSourceRepor
 
 function resolveSourceId(serverId: string, raw: unknown): string {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    if (serverId === 'linkedin-mcp-zero') return 'linkedin';
+    if (serverId === 'himalayas-mcp') return 'himalayas';
     return serverId;
   }
   const record = raw as Record<string, unknown>;
   if (serverId === 'apify-apna') return 'apna';
-  if (serverId === 'apify-boards') {
+  if (serverId === 'linkedin-mcp-zero') return 'linkedin';
+  if (serverId === 'himalayas-mcp') return 'himalayas';
+  if (serverId === 'apify-boards' || serverId === 'mcp-jobspy-speedyapply') {
     const source = String(record.source ?? record.site ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
     const sources: Record<string, string> = {
       naukri: 'naukri',
@@ -348,8 +352,10 @@ function resolveSourceId(serverId: string, raw: unknown): string {
       glassdoor: 'glassdoor',
       ziprecruiter: 'ziprecruiter',
       bayt: 'bayt',
+      bdjobs: 'bdjobs',
+      hellowork: 'hellowork',
     };
-    return sources[source] ?? 'apify-boards';
+    return sources[source] ?? (serverId === 'mcp-jobspy-speedyapply' ? 'jobspy' : 'apify-boards');
   }
   return serverId;
 }
