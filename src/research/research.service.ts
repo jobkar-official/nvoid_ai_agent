@@ -43,6 +43,7 @@ type ResearchCallResult = {
   status: 'success' | 'failed';
   durationMs: number;
   recordsReturned: number;
+  providerReport?: Record<string, unknown>;
   error?: string;
 };
 
@@ -184,6 +185,13 @@ export class ResearchService {
       try {
         const raw = await this.registry.callTool(plan.serverId, plan.toolName, plan.arguments);
         const records = extractResearchRecords(raw);
+        const root = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+        const structured = root.structuredContent && typeof root.structuredContent === 'object'
+          ? root.structuredContent as Record<string, unknown>
+          : {};
+        const providerReport = structured.searchReport && typeof structured.searchReport === 'object'
+          ? boundValue(structured.searchReport) as Record<string, unknown>
+          : undefined;
         return {
           call: {
             serverId: plan.serverId,
@@ -193,6 +201,7 @@ export class ResearchService {
             status: 'success',
             durationMs: Date.now() - started,
             recordsReturned: records.length,
+            ...(providerReport ? { providerReport } : {}),
           },
           records,
         };
@@ -296,7 +305,7 @@ export class ResearchService {
 export function isReadOnlyResearchTool(tool: ResearchTool): boolean {
   const normalizedName = tool.name.replace(/([a-z0-9])([A-Z])/g, '$1_$2');
   const identity = (normalizedName + ' ' + (tool.description ?? '')).trim();
-  if (MUTATING_TOOL_PATTERN.test(normalizedName) || MUTATING_TOOL_PATTERN.test(identity)) return false;
+  if (MUTATING_TOOL_PATTERN.test(normalizedName)) return false;
   if (tool.annotations?.destructiveHint === true || tool.annotations?.readOnlyHint === false) return false;
   if (tool.annotations?.readOnlyHint === true) return true;
   return READ_TOOL_PATTERN.test(normalizedName);
