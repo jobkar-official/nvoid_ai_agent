@@ -135,7 +135,7 @@ function buildSearchQueries(profile) {
   const role=String(profile.query||profile.jobTitle||'').trim().slice(0,140);
   const loc=String(profile.location||(profile.countries||[]).join(' ')||'').trim().slice(0,100);
   const places=locationVariants(loc);
-  const place=places[0]&& !/^(worldwide|global|anywhere|remote|all countries)$/i.test(places[0])?quote(places[0]):'remote';
+  const place=places.length&&!/^(worldwide|global|anywhere|remote|all countries)$/i.test(places[0])?'('+places.map(quote).join(' OR ')+')':'remote';
   const roleForms=roleVariants(role);
   const skills=[...(profile.skills||[]),...(profile.keywords||[])].map(String).map(s=>s.trim()).filter(Boolean).slice(0,5);
   const queries=[];
@@ -155,16 +155,16 @@ function buildSearchQueries(profile) {
     add(quote(role)+' '+skills.slice(0,2).map(quote).join(' ')+' '+place+' careers');
   }
   const boardDomains=[
-    'linkedin.com/jobs','naukri.com','indeed.com','foundit.in','apna.co','glassdoor.com',
-    'wellfound.com/jobs','cutshort.io','instahyre.com','hirist.com','iimjobs.com','shine.com'
+    'linkedin.com/jobs','naukri.com','indeed.com','foundit.in','apna.co','glassdoor.com','wellfound.com/jobs'
   ];
   for(const domain of boardDomains)add('site:'+domain+' '+role+' '+place+' jobs');
+  add('site:cutshort.io OR site:instahyre.com OR site:hirist.com OR site:iimjobs.com OR site:shine.com '+role+' '+place+' jobs');
   const atsDomains=[
     'boards.greenhouse.io','job-boards.greenhouse.io','jobs.lever.co','jobs.ashbyhq.com',
-    'myworkdayjobs.com','jobs.smartrecruiters.com','jobs.workable.com','jobs.jobvite.com',
-    'jobs.icims.com','successfactors.eu','oraclecloud.com','teamtailor.com','breezy.hr','recruitee.com'
+    'myworkdayjobs.com','jobs.smartrecruiters.com','jobs.workable.com','jobs.jobvite.com','jobs.icims.com'
   ];
   for(const domain of atsDomains)add('site:'+domain+' '+role+' '+place);
+  add('site:successfactors.eu OR site:oraclecloud.com OR site:teamtailor.com OR site:breezy.hr OR site:recruitee.com OR site:pinpoint.com '+role+' '+place);
   for(const domain of governmentDomains(loc)){
     add('site:'+domain+' '+role+' '+place+' recruitment OR vacancy OR notification');
     add('site:'+domain+' '+role+' recruitment appointment contract');
