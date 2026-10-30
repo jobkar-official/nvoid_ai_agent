@@ -269,7 +269,7 @@ export class JobDiscoveryService {
 }
 
 
-function extractSearchId(value: unknown, depth = 0): string | undefined {
+export function extractSearchId(value: unknown, depth = 0): string | undefined {
   if (depth > 8 || value === null || value === undefined) return undefined;
   if (typeof value === 'string') {
     const text = value.trim();
@@ -298,7 +298,7 @@ function extractSearchId(value: unknown, depth = 0): string | undefined {
   return undefined;
 }
 
-function isJobDetailTool(name: string): boolean {
+export function isJobDetailTool(name: string): boolean {
   const normalized = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
   return normalized === 'get_job'
     || /(?:^|_)get_job_details?$/.test(normalized)
@@ -306,7 +306,7 @@ function isJobDetailTool(name: string): boolean {
     || /(?:^|_)job_details?$/.test(normalized);
 }
 
-function buildJobDetailArguments(schemaValue: unknown, job: NormalizedJob, profile: JobProfile): Record<string, unknown> | undefined {
+export function buildJobDetailArguments(schemaValue: unknown, job: NormalizedJob, profile: JobProfile): Record<string, unknown> | undefined {
   if (!schemaValue || typeof schemaValue !== 'object') return undefined;
   const schema = schemaValue as { properties?: Record<string, { type?: string }>; required?: string[] };
   const properties = schema.properties ?? {};
