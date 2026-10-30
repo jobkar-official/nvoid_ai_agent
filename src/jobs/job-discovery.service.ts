@@ -226,8 +226,8 @@ function inferArguments(schemaValue: unknown, profile: JobProfile, limit: number
   for (const [name, metadata] of Object.entries(properties)) {
     const compact = name.toLowerCase().replace(/[^a-z0-9]/g, '');
     let value: unknown;
-    if (/^(q|query|keyword|keywords|search|searchterm|searchquery|jobtitle|title|position|role|job|jobname)$/.test(compact)) value = /s$/.test(compact) && metadata.type === 'array' ? [profile.jobTitle, ...(profile.keywords ?? [])] : [profile.jobTitle, ...(profile.keywords ?? [])].filter(Boolean).join(' ');
-    else if (/^(location|city|region|geo|geography|place|joblocation|preferredlocation)$/.test(compact)) value = profile.location ?? profile.countries?.join(', ');
+    if (/^(q|query|querytext|keyword|keywords|search|searchtext|searchterm|searchquery|term|jobtitle|title|position|role|job|jobname)$/.test(compact)) value = /s$/.test(compact) && metadata.type === 'array' ? [profile.jobTitle, ...(profile.keywords ?? [])] : [profile.jobTitle, ...(profile.keywords ?? [])].filter(Boolean).join(' ');
+    else if (/^(location|locationname|city|cityname|region|geo|geography|place|joblocation|preferredlocation)$/.test(compact)) value = profile.location ?? profile.countries?.join(', ');
     else if (/^(country|countries|countrycode)$/.test(compact)) value = metadata.type === 'array' ? profile.countries : profile.countries?.[0] ?? profile.location;
     else if (/^(skills|skill|technologies|techstack)$/.test(compact)) value = metadata.type === 'array' ? profile.skills : profile.skills?.join(', ');
     else if (/^(experience|experienceyears|minexperience|yearsofexperience|experiencelevel)$/.test(compact)) value = profile.experienceYears;
@@ -235,7 +235,7 @@ function inferArguments(schemaValue: unknown, profile: JobProfile, limit: number
     else if (/^(salarymax|maxsalary|maximumsalary|salaryto)$/.test(compact)) value = profile.salaryMax;
     else if (/^(currency|salarycurrency)$/.test(compact)) value = profile.salaryCurrency;
     else if (/^(remote|remoteonly|isremote)$/.test(compact)) value = profile.remote;
-    else if (/^(limit|count|pageSize|maxresults|numresults|resultlimit|perpage|pagesize)$/.test(compact)) value = limit;
+    else if (/^(limit|count|pageSize|maxresults|maxrows|numresults|resultlimit|perpage|pagesize|take)$/.test(compact)) value = limit;
     else if (/^(jobtype|employmenttype|employmenttypes)$/.test(compact)) value = metadata.type === 'array' ? profile.employmentTypes : profile.employmentTypes?.join(', ');
     else if (/^(userId|userid)$/.test(compact)) value = profile.userId;
     if (value !== undefined) result[name] = value;
