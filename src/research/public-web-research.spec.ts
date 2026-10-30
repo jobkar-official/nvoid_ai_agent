@@ -7,7 +7,7 @@ const {
 
 describe('Google dork query expansion', () => {
   it('expands plain-language research into complementary public-web dorks', () => {
-    const queries = buildDorkQueries('Java backend developer jobs in India');
+    const queries: string[] = buildDorkQueries('Java backend developer jobs in India');
     expect(queries).toContain('"Java backend developer jobs in India"');
     expect(queries).toContain('intitle:"Java backend developer"');
     expect(queries.some((query) => query.startsWith('site:linkedin.com/jobs'))).toBe(true);
