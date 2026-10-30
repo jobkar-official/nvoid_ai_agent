@@ -5,7 +5,7 @@ const crawler = require('../../scripts/search-engine-jobs-mcp-server.cjs') as {
   locationMatch: (location: string, description: string, url: string, requested: string) => boolean;
   safeUrl: (url: string) => URL | undefined;
   isJobUrl: (url: string, evidence?: string) => boolean;
-  parsePage: (html: string, url: string) => { title: string; description: string; canonicalUrl: string; postings: Array<Record<string, unknown>> };
+  parsePage: (html: string, url: string) => { title: string; description: string; canonicalUrl: string; postings: Array<Record<string, unknown>>; links: Array<{ url: string; text: string }> };
   normalizeSearchResponse: (data: Record<string, unknown>) => { results: Array<Record<string, unknown>>; more: boolean };
 };
 describe('search-engine job crawler', () => {
@@ -52,10 +52,11 @@ describe('search-engine job crawler', () => {
     expect(normalized.results[0].profile).toEqual({ name: '', long_name: 'jobs.lever.co' });
   });
   it('extracts schema.org JobPosting structured data', () => {
-    const html = '<html><head><title>Java Developer - Acme</title><meta name="description" content="Java role in Bengaluru"></head><body><script type="application/ld+json">{"@context":"https://schema.org","@type":"JobPosting","title":"Java Developer","hiringOrganization":{"@type":"Organization","name":"Acme"},"jobLocation":{"@type":"Place","address":{"@type":"PostalAddress","addressLocality":"Bengaluru","addressCountry":"India"}},"description":"Build Java services"}</script></body></html>';
+    const html = '<html><head><title>Java Developer - Acme</title><meta name="description" content="Java role in Bengaluru"></head><body><a href="/jobs/java-developer">Java Developer opening</a><script type="application/ld+json">{"@context":"https://schema.org","@type":"JobPosting","title":"Java Developer","hiringOrganization":{"@type":"Organization","name":"Acme"},"jobLocation":{"@type":"Place","address":{"@type":"PostalAddress","addressLocality":"Bengaluru","addressCountry":"India"}},"description":"Build Java services"}</script></body></html>';
     const page = crawler.parsePage(html, 'https://jobs.lever.co/acme/123');
     expect(page.title).toBe('Java Developer - Acme');
     expect(page.postings).toHaveLength(1);
     expect(page.postings[0].title).toBe('Java Developer');
+    expect(page.links).toContainEqual({ url: 'https://jobs.lever.co/jobs/java-developer', text: 'Java Developer opening' });
   });
 });
