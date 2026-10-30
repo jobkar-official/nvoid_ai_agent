@@ -21,6 +21,13 @@ describe('public web research MCP crawler parsing', () => {
     });
   });
 
+  it('retains the query variant that produced each public search record', () => {
+    const records = normalizeOrganic([
+      { title: 'Careers', link: 'https://example.com/jobs', _nvoidSearchQuery: 'site:example.com jobs' },
+    ], 'original search');
+    expect(records[0].searchQuery).toBe('site:example.com jobs');
+  });
+
   it('extracts page title, metadata, canonical URL and readable page text', () => {
     const html = '<html><head><title>Research Page</title><meta name="description" content="A public description"><link rel="canonical" href="https://example.com/canonical"></head><body><script>secret()</script><h1>Public research</h1><p>Actual page content &amp; details.</p></body></html>';
     const page = extractPage(html, 'https://example.com/source');
