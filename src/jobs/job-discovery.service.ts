@@ -109,7 +109,11 @@ export class JobDiscoveryService {
         const result = entry.server.id === 'jobicy'
           ? await this.callJobicyWithCache(entry.server.id, entry.tool, sourceArgs)
           : await this.mcpRegistry.callTool(entry.server.id, entry.tool, sourceArgs);
-        const rawJobs = parseMcpJobResult(result);
+        const searchId = extractSearchId(result);
+        const rawJobs = parseMcpJobResult(result).map((raw) => {
+          if (!searchId || !raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+          return { ...(raw as Record<string, unknown>), search_id: searchId };
+        });
         const jobs = rawJobs
           .map((raw) => normalizeJob(raw, resolveSourceId(entry.server.id, raw), profile))
           .filter((job): job is NormalizedJob => Boolean(job))
@@ -140,11 +144,15 @@ export class JobDiscoveryService {
     }));
 
     const deduplicated = new Map<string, NormalizedJob>();
+    const sourceForJobId = new Map<string, string>();
     for (const sourceResult of sourceResults) {
       for (const job of sourceResult.jobs) {
         const dedupeKey = (job.applicationUrl ?? job.jobUrl ?? `${job.title}|${job.company ?? ''}|${job.location ?? ''}`).toLowerCase().replace(/\/$/, '');
         const existing = deduplicated.get(dedupeKey);
-        if (!existing || job.matchScore > existing.matchScore) deduplicated.set(dedupeKey, job);
+        if (!existing || job.matchScore > existing.matchScore) {
+          deduplicated.set(dedupeKey, job);
+          sourceForJobId.set(job.id, sourceResult.serverId);
+        }
       }
     }
 
@@ -154,9 +162,17 @@ export class JobDiscoveryService {
       return { ...job, matchScore: Math.max(job.matchScore, match.score), matchReasons: [...new Set([...job.matchReasons, ...match.reasons])] };
     });
     const initiallyRanked = candidates.sort((a, b) => b.matchScore - a.matchScore);
-    const aiCandidates = initiallyRanked.slice(0, Math.min(100, initiallyRanked.length));
+    const detailTargets = initiallyRanked.slice(0, Math.min(10, initiallyRanked.length));
+    const detailedJobs = await Promise.all(detailTargets.map((job) => this.enrichJobDetails(
+      job,
+      sourceForJobId.get(job.id),
+      profile,
+    )));
+    const detailById = new Map(detailedJobs.map((job) => [job.id, job]));
+    const rankedWithDetails = initiallyRanked.map((job) => detailById.get(job.id) ?? job);
+    const aiCandidates = rankedWithDetails.slice(0, Math.min(100, rankedWithDetails.length));
     const AIranked = await this.aiAgent.rerankJobs(profile, aiCandidates);
-    const jobs = [...AIranked, ...initiallyRanked.slice(aiCandidates.length)].sort((a, b) => b.matchScore - a.matchScore).slice(0, requestedLimit);
+    const jobs = [...AIranked, ...rankedWithDetails.slice(aiCandidates.length)].sort((a, b) => b.matchScore - a.matchScore).slice(0, requestedLimit);
 
     let backendSync: { synced: boolean; reason?: string } = { synced: false, reason: 'Backend sync disabled for this search.' };
     if (syncToBackend) backendSync = await this.backendSync.syncJobs(profile.userId, profile, jobs);
@@ -170,6 +186,38 @@ export class JobDiscoveryService {
       searchReport: sourceResults.flatMap((entry) => entry.report ? [entry.report] : []),
       backendSync,
     };
+  }
+
+
+  private async enrichJobDetails(job: NormalizedJob, serverId: string | undefined, profile: JobProfile): Promise<NormalizedJob> {
+    if (!serverId) return job;
+    const tools = this.mcpRegistry.getToolCatalog(serverId).flatMap((entry) => entry.tools);
+    const detailTool = tools.find((tool) => isJobDetailTool(tool.name));
+    if (!detailTool) return job;
+    const args = buildJobDetailArguments(detailTool.inputSchema, job, profile);
+    if (!args) return job;
+
+    try {
+      const result = await this.mcpRegistry.callTool(serverId, detailTool.name, args);
+      const detailRecords = parseMcpJobResult(result);
+      const detail = detailRecords.find((value) => value && typeof value === 'object' && !Array.isArray(value)) as Record<string, unknown> | undefined;
+      if (!detail) return job;
+      const raw = { ...(job.raw ?? {}), ...detail };
+      const normalized = normalizeJob(raw, job.source, profile);
+      if (!normalized) return { ...job, raw };
+      const match = calculateMatchScore(raw, normalized.title, normalized.location, profile);
+      return {
+        ...job,
+        ...normalized,
+        matchScore: Math.max(job.matchScore, normalized.matchScore, match.score),
+        matchReasons: [...new Set([...job.matchReasons, ...normalized.matchReasons, ...match.reasons])],
+        raw,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.debug(`Job detail lookup skipped for ${serverId}/${detailTool.name}: ${message}`);
+      return job;
+    }
   }
 
   private async callJobicyWithCache(serverId: string, tool: string, args: Record<string, unknown>): Promise<unknown> {
@@ -190,6 +238,85 @@ export class JobDiscoveryService {
     this.jobicyCache.set(cacheKey, { expiresAt: now + 60 * 60 * 1000, result });
     return result;
   }
+}
+
+
+function extractSearchId(value: unknown, depth = 0): string | undefined {
+  if (depth > 8 || value === null || value === undefined) return undefined;
+  if (typeof value === 'string') {
+    const text = value.trim();
+    if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']'))) {
+      try { return extractSearchId(JSON.parse(text) as unknown, depth + 1); } catch { return undefined; }
+    }
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = extractSearchId(item, depth + 1);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  if (typeof value !== 'object') return undefined;
+  const record = value as Record<string, unknown>;
+  const direct = record.search_id ?? record.searchId ?? record.searchID;
+  if (typeof direct === 'string' && direct.trim()) return direct.trim();
+  for (const key of ['structuredContent', 'content', 'text', 'result', 'data', 'output']) {
+    if (key in record) {
+      const found = extractSearchId(record[key], depth + 1);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+function isJobDetailTool(name: string): boolean {
+  const normalized = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return normalized === 'get_job'
+    || /(?:^|_)get_job_details?$/.test(normalized)
+    || /(?:^|_)(?:fetch|retrieve)_job_details?$/.test(normalized)
+    || /(?:^|_)job_details?$/.test(normalized);
+}
+
+function buildJobDetailArguments(schemaValue: unknown, job: NormalizedJob, profile: JobProfile): Record<string, unknown> | undefined {
+  if (!schemaValue || typeof schemaValue !== 'object') return undefined;
+  const schema = schemaValue as { properties?: Record<string, { type?: string }>; required?: string[] };
+  const properties = schema.properties ?? {};
+  if (Object.keys(properties).length === 0) return undefined;
+  const raw = job.raw ?? {};
+  const jobId = raw.id ?? raw.jobId ?? raw.job_id ?? raw.jobKey ?? raw.job_key ?? raw.key ?? raw.slug ?? job.sourceJobId;
+  const searchId = raw.search_id ?? raw.searchId ?? raw.searchID;
+  const country = raw.country ?? raw.country_name ?? profile.countries?.[0] ?? inferCountry(profile);
+  const args: Record<string, unknown> = {};
+  const missing: string[] = [];
+
+  for (const [name, metadata] of Object.entries(properties)) {
+    const compact = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    let value: unknown;
+    if (compact === 'searchid' || compact === 'searchidentifier') value = searchId;
+    else if (compact === 'jobids' || compact === 'ids') value = jobId === undefined ? undefined : [String(jobId)];
+    else if (/^(id|jobid|jobkey|key|jobcode|slug|jobslug|jobidentifier)$/.test(compact)) value = jobId;
+    else if (/^(url|joburl|jobpostingurl|postingurl|link)$/.test(compact)) value = job.jobUrl ?? job.applicationUrl;
+    else if (/^(country|countryname|countrycode)$/.test(compact)) value = country;
+    else if (/^(company|companyname|employer)$/.test(compact)) value = job.company;
+    else if (/^(location|loc)$/.test(compact)) value = job.location ?? profile.location;
+    else if (/^(limit|count|n|resultswanted)$/.test(compact)) value = 1;
+    if (value !== undefined) {
+      args[name] = metadata.type === 'array' && !Array.isArray(value) ? [value] : value;
+    } else if ((schema.required ?? []).includes(name)) {
+      missing.push(name);
+    }
+  }
+
+  return missing.length > 0 ? undefined : args;
+}
+
+function inferCountry(profile: JobProfile): string | undefined {
+  const text = `${profile.location ?? ''} ${(profile.countries ?? []).join(' ')}`.toLowerCase();
+  if (/\b(india|bengaluru|bangalore|delhi|noida|gurugram|gurgaon|mumbai|hyderabad|chennai|pune|kolkata)\b/.test(text)) return 'India';
+  if (/\b(united states|usa|new york|san francisco|california|texas|seattle|boston)\b/.test(text)) return 'United States';
+  if (/\b(united kingdom|uk|london|manchester)\b/.test(text)) return 'United Kingdom';
+  return undefined;
 }
 
 function parseSearchReport(result: unknown, serverId: string): SearchSourceReport | undefined {
@@ -238,8 +365,8 @@ function inferArguments(schemaValue: unknown, profile: JobProfile, limit: number
   for (const [name, metadata] of Object.entries(properties)) {
     const compact = name.toLowerCase().replace(/[^a-z0-9]/g, '');
     let value: unknown;
-    if (/^(q|query|querytext|keyword|keywords|search|searchtext|searchterm|searchquery|term|jobtitle|title|position|role|job|jobname)$/.test(compact)) value = /s$/.test(compact) && metadata.type === 'array' ? [profile.jobTitle, ...(profile.keywords ?? [])] : [profile.jobTitle, ...(profile.keywords ?? [])].filter(Boolean).join(' ');
-    else if (/^(location|locationname|city|cityname|region|geo|geography|place|joblocation|preferredlocation)$/.test(compact)) value = profile.location ?? profile.countries?.join(', ');
+    if (/^(q|kw|query|querytext|keyword|keywords|search|searchtext|searchterm|searchquery|term|jobtitle|title|position|role|job|jobname)$/.test(compact)) value = /s$/.test(compact) && metadata.type === 'array' ? [profile.jobTitle, ...(profile.keywords ?? [])] : [profile.jobTitle, ...(profile.keywords ?? [])].filter(Boolean).join(' ');
+    else if (/^(loc|location|locationname|city|cityname|region|geo|geography|place|joblocation|preferredlocation)$/.test(compact)) value = profile.location ?? profile.countries?.join(', ');
     else if (/^(country|countries|countrycode)$/.test(compact)) value = metadata.type === 'array' ? profile.countries : profile.countries?.[0] ?? profile.location;
     else if (/^(skills|skill|technologies|techstack)$/.test(compact)) value = metadata.type === 'array' ? profile.skills : profile.skills?.join(', ');
     else if (/^(experience|experienceyears|minexperience|yearsofexperience|experiencelevel)$/.test(compact)) value = profile.experienceYears;
