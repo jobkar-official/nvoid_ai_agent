@@ -76,6 +76,17 @@ describe('research MCP argument mapping', () => {
     }, 100)).toBeUndefined();
   });
 
+  it('does not treat an extracted city as a country code or countries list', () => {
+    expect(inferResearchArguments('Find software engineers in Bengaluru', {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        countries: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['query', 'countries'],
+    }, 100)).toBeUndefined();
+  });
+
   it('supports an empty argument object when the tool requires no input', () => {
     expect(inferResearchArguments('Show current metrics', {
       type: 'object',
@@ -155,6 +166,46 @@ describe('ResearchService', () => {
     expect(result.report.successfulCalls).toBe(1);
     expect(result.report.rawRecords).toBe(2);
     expect(result.report.uniqueRecords).toBe(2);
+  });
+
+  it('includes configured but disconnected connectors in the execution report', async () => {
+    const registry = {
+      getStatuses: () => [
+        { id: 'online', name: 'Online source', enabled: true, connected: true },
+        { id: 'offline', name: 'Offline source', enabled: true, connected: false, error: 'Connection refused' },
+      ],
+      getToolCatalog: () => [{
+        serverId: 'online',
+        serverName: 'Online source',
+        tools: [{ name: 'search_records', inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } }],
+      }],
+      callTool: jest.fn().mockResolvedValue({ structuredContent: { records: [{ id: 'one', title: 'Result' }] } }),
+    };
+    const ai = { isEnabled: () => false };
+    const service = new ResearchService(registry as never, ai as never);
+    const result = await service.run({ query: 'Search records', maxRecords: 10, maxTools: 5 });
+    expect(result.report.configuredServers).toBe(2);
+    expect(result.report.connectedServers).toBe(1);
+    expect(result.report.perConnector).toEqual(expect.arrayContaining([
+      expect.objectContaining({ serverId: 'offline', connected: false, connectionError: 'Connection refused', callsSucceeded: 0 }),
+    ]));
+  });
+
+  it('does not collide identical provider IDs from different MCP servers when no URL is present', async () => {
+    const registry = {
+      getStatuses: () => [],
+      getToolCatalog: () => ['source-a', 'source-b'].map((serverId) => ({
+        serverId,
+        serverName: serverId,
+        tools: [{ name: 'search_records', inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } }],
+      })),
+      callTool: jest.fn().mockResolvedValue({ structuredContent: { records: [{ id: '42' }] } }),
+    };
+    const ai = { isEnabled: () => false };
+    const service = new ResearchService(registry as never, ai as never);
+    const result = await service.run({ query: 'Search records', maxRecords: 10, maxTools: 5 });
+    expect(result.records).toHaveLength(2);
+    expect(result.report.duplicatesRemoved).toBe(0);
   });
 
   it('deduplicates repeated real records returned by different MCP tools', async () => {
