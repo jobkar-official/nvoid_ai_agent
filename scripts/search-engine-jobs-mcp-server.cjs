@@ -314,29 +314,86 @@ async function discover(args,limit) {
     const batch=await concurrent(tasks,envInt('SERPER_SEARCH_CONCURRENCY',10,1,10),async task=>({task,page:await searchPage(task.q,task.offset,searchCountry(location))}));
     calls+=tasks.length;
     for(const item of batch){if(!item?.page){failures++;continue;}indexed+=item.page.results.length;more=more||item.page.more;
-      for(const r of item.page.results){
-        const evidence=[r?.title,r?.description,r?.snippet,...(r?.extra_snippets||[])].map(clean).join(' ');
-        const url=safeUrl(r?.url);
+      for(const result of item.page.results){
+        const evidence=[result?.title,result?.description,result?.snippet,...(result?.extra_snippets||[])].map(clean).join(' ');
+        const url=safeUrl(result?.url);
         if(!url||!isJobUrl(url.href,evidence)){rejectedUrl++;continue;}
-        if(!matchesRole(r?.title||'',evidence,role)){rejectedRole++;continue;}
-        const c=candidateFromResult(r,role,location,item.task.q);if(c&&!candidateMap.has(c.url))candidateMap.set(c.url,c);
+        if(!matchesRole(result?.title||'',evidence,role)){rejectedRole++;continue;}
+        const candidate=candidateFromResult(result,role,location,item.task.q);
+        if(candidate&&!candidateMap.has(candidate.url))candidateMap.set(candidate.url,candidate);
       }
     }
     if(candidateMap.size>=target*1.2)break;
   }
-  const candidates=[...candidateMap.values()],maxFetch=Math.min(envInt('SERPER_SEARCH_MAX_PAGE_FETCHES',250,0,500),candidates.length);
-  const crawled=await concurrent(candidates.slice(0,maxFetch),envInt('SERPER_SEARCH_PAGE_CRAWL_CONCURRENCY',20,1,20),async c=>({candidate:c,page:await crawl(c.url)}));
-  const unique=new Map();let structured=0,metadata=0;
-  for(const item of crawled){if(!item)continue;
-    if(item.page?.postings?.length){let accepted=false;
-      for(const posting of item.page.postings){const job=mapPosting(posting,item.candidate,item.page);if(!job.url||!isJobUrl(job.url,job.title+' '+job.description)||!matchesRole(job.title,job.description,role)){rejectedRole++;continue;}if(!locationMatch(job.location,job.description,job.url,location)){rejectedLocation++;continue;}if(!unique.has(job.url))unique.set(job.url,job);accepted=true;}
+  const candidates=[...candidateMap.values()],pageBudget=envInt('SERPER_SEARCH_MAX_PAGE_FETCHES',250,0,500);
+  const primaryFetchLimit=Math.min(candidates.length,pageBudget>0?Math.max(1,Math.floor(pageBudget*0.6)):0);
+  const crawled=await concurrent(candidates.slice(0,primaryFetchLimit),envInt('SERPER_SEARCH_PAGE_CRAWL_CONCURRENCY',20,1,20),async candidate=>({candidate,page:await crawl(candidate.url)}));
+  const linkedCandidates=new Map();
+  for(const item of crawled){
+    if(!item?.page?.links?.length)continue;
+    for(const link of item.page.links){
+      const url=safeUrl(link.url),evidence=[link.text,link.url].join(' ');
+      if(!url||!isJobUrl(url.href,evidence)||!matchesRole(evidence,evidence,role)||candidateMap.has(url.href)||linkedCandidates.has(url.href))continue;
+      linkedCandidates.set(url.href,{
+        url:url.href,title:clean(link.text)||clean(url.pathname.split('/').filter(Boolean).pop()||''),
+        description:clean([item.page.description,item.candidate.description].filter(Boolean).join(' ')),
+        extra:[item.candidate.description].filter(Boolean),domain:url.hostname,company:item.candidate.company,
+        age:'',query:'discovered-from-public-career-page',location,role
+      });
+    }
+  }
+  const linkCandidates=[...linkedCandidates.values()],secondaryLimit=Math.max(0,pageBudget-crawled.length);
+  const linkedCrawled=await concurrent(linkCandidates.slice(0,secondaryLimit),envInt('SERPER_SEARCH_PAGE_CRAWL_CONCURRENCY',20,1,20),async candidate=>({candidate,page:await crawl(candidate.url)}));
+  const allCrawled=[...crawled,...linkedCrawled],unique=new Map();
+  let structured=0,metadata=0;
+  for(const item of allCrawled){
+    if(!item)continue;
+    if(item.page?.postings?.length){
+      let accepted=false;
+      for(const posting of item.page.postings){
+        const job=mapPosting(posting,item.candidate,item.page);
+        if(!job.url||!isJobUrl(job.url,job.title+' '+job.description)||!matchesRole(job.title,job.description,role)){rejectedRole++;continue;}
+        if(!locationMatch(job.location,job.description,job.url,location)){rejectedLocation++;continue;}
+        if(!unique.has(job.url))unique.set(job.url,job);
+        accepted=true;
+      }
       if(accepted){structured++;continue;}
     }
-    const job=mapResult(item.candidate,item.page);if(job&&matchesRole(job.title,job.description,role)){if(!locationMatch(job.location,job.description,job.url,location)){rejectedLocation++;continue;}if(!unique.has(job.url))unique.set(job.url,job);metadata++;}
+    const job=mapResult(item.candidate,item.page);
+    if(job&&matchesRole(job.title,job.description,role)){
+      if(!locationMatch(job.location,job.description,job.url,location)){rejectedLocation++;continue;}
+      if(!unique.has(job.url))unique.set(job.url,job);
+      metadata++;
+    }else if(job)rejectedRole++;
   }
-  for(const c of candidates.slice(maxFetch)){const job=mapResult(c,undefined);if(job&&matchesRole(job.title,job.description,role)){if(!locationMatch(job.location,job.description,job.url,location)){rejectedLocation++;continue;}if(!unique.has(job.url))unique.set(job.url,job);metadata++;}}
-  const records=[...unique.values()],jobs=records.slice(0,target),kinds=records.reduce((counts,job)=>{const kind=job.raw?.opportunityType||'employment';counts[kind]=(counts[kind]||0)+1;return counts;},{});
-  return{jobs,report:{provider:'Serper Google Search API',mode:'Google dork discovery, public career-page extraction and recruitment/tender notice discovery',queryCount:queries.length,requestsMade:calls,rawIndexedResults:indexed,uniqueRoleLocationUrls:candidates.length,publicJobPagesFetched:crawled.filter(x=>x?.page).length,structuredJobPages:structured,metadataOnlyListings:metadata,matchedJobs:records.length,returnedJobs:jobs.length,targetCount:target,reachedRequestedLimit:jobs.length>=target,moreSearchResultsAvailable:more,failedSearchRequests:failures,rejectedUrlResults:rejectedUrl,rejectedRoleResults:rejectedRole,rejectedLocationResults:rejectedLocation,opportunityTypes:kinds,truncated:records.length>jobs.length||candidates.length>=target*1.2}};
+  const attemptedUrls=new Set(allCrawled.map(item=>item?.candidate?.url).filter(Boolean));
+  const unfetchedCandidates=[...candidates,...linkCandidates].filter(candidate=>!attemptedUrls.has(candidate.url));
+  for(const candidate of unfetchedCandidates){
+    const job=mapResult(candidate,undefined);
+    if(job&&matchesRole(job.title,job.description,role)){
+      if(!locationMatch(job.location,job.description,job.url,location)){rejectedLocation++;continue;}
+      if(!unique.has(job.url))unique.set(job.url,job);
+      metadata++;
+    }else if(job)rejectedRole++;
+  }
+  const records=[...unique.values()],jobs=records.slice(0,target),kinds=records.reduce((counts,job)=>{
+    const kind=job.raw?.opportunityType||'employment';counts[kind]=(counts[kind]||0)+1;return counts;
+  },{});
+  return{jobs,report:{
+    provider:'Serper Google Search API',
+    mode:'Google dork discovery, public career-page link crawling and recruitment/tender notice discovery',
+    queryCount:queries.length,requestsMade:calls,rawIndexedResults:indexed,
+    uniqueRoleLocationUrls:candidates.length+linkCandidates.length,
+    linkedJobUrlsDiscovered:linkCandidates.length,
+    publicJobPagesFetched:allCrawled.filter(item=>item?.page).length,
+    structuredJobPages:structured,metadataOnlyListings:metadata,
+    matchedJobs:records.length,returnedJobs:jobs.length,targetCount:target,
+    reachedRequestedLimit:jobs.length>=target,moreSearchResultsAvailable:more,
+    failedSearchRequests:failures,rejectedUrlResults:rejectedUrl,
+    rejectedRoleResults:rejectedRole,rejectedLocationResults:rejectedLocation,
+    opportunityTypes:kinds,
+    truncated:records.length>jobs.length||candidates.length>=target*1.2||linkCandidates.length>secondaryLimit
+  }};
 }
 async function search(args) {
   const role=String(args.query||'').trim(),loc=String(args.location||(args.countries||[]).join(', ')||'').trim(),limit=Number.isFinite(Number(args.limit))?Math.min(1000,Math.max(1,Math.floor(Number(args.limit)))):500;
