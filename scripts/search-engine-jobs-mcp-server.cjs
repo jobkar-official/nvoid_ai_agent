@@ -202,13 +202,21 @@ function walkPosting(value,out,depth) {
   for(const child of Object.values(value))if(child&&typeof child==='object')walkPosting(child,out,depth+1);
 }
 function parsePage(html,url) {
-  const p={title:'',description:'',canonicalUrl:url,postings:[]};
+  const p={title:'',description:'',canonicalUrl:url,postings:[],links:[]};
   const title=String(html).match(/<title\b[^>]*>([\s\S]*?)<\/title>/i);
   const desc=String(html).match(/<meta\b[^>]*name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i)||String(html).match(/<meta\b[^>]*content=["']([^"']*)["'][^>]*name=["']description["'][^>]*>/i);
   const can=String(html).match(/<link\b[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["'][^>]*>/i);
   p.title=clean(title?.[1]||'');p.description=clean(desc?.[1]||'');
   const c=safeUrl(clean(can?.[1]||''));if(c)p.canonicalUrl=c.href;
   for(const m of String(html).matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)){try{walkPosting(JSON.parse(String(m[1]||'').replace(/^\s*<!\[CDATA\[/,'').replace(/\]\]>\s*$/,'')),p.postings,0);}catch{}}
+  for(const m of String(html).matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)){
+    try{
+      const linked=safeUrl(new URL(clean(m[1]),url).href);
+      const text=clean(m[2]);
+      if(linked&&text&&linked.href!==url)p.links.push({url:linked.href,text});
+      if(p.links.length>=150)break;
+    }catch{}
+  }
   return p;
 }
 function companyFrom(url) {
