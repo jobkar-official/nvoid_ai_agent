@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { AgentApiKeyGuard } from '../common/api-key.guard';
 import { SearchJobsDto } from '../dto/search-jobs.dto';
 import { JobDiscoveryService } from './job-discovery.service';
@@ -7,6 +7,11 @@ import { JobDiscoveryService } from './job-discovery.service';
 @UseGuards(AgentApiKeyGuard)
 export class JobsController {
   constructor(private readonly discovery: JobDiscoveryService) {}
+
+  @Get('sources')
+  sources() {
+    return { sources: this.discovery.getSearchSources() };
+  }
 
   @Post('search')
   search(@Body() dto: SearchJobsDto) {
