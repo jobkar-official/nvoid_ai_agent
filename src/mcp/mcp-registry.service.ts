@@ -86,7 +86,7 @@ export class McpRegistryService implements OnApplicationBootstrap, OnModuleDestr
       }
       const candidate = entry.tools.find((tool) => {
         const identity = `${tool.name} ${tool.description ?? ''}`.toLowerCase();
-        return /(search|find|list|discover|fetch).{0,45}(jobs?|vacanc(?:y|ies)|open.?roles?|positions?|opportunit(?:y|ies)|recruitment|tenders?)|(jobs?|vacanc(?:y|ies)|open.?roles?|positions?|opportunit(?:y|ies)|recruitment|tenders?).{0,45}(search|find|list|discover|fetch)/i.test(identity)
+        return /(search|find|list|discover|fetch|query).{0,45}(jobs?|vacanc(?:y|ies)|open.?roles?|positions?|opportunit(?:y|ies)|recruitment|tenders?)|(jobs?|vacanc(?:y|ies)|open.?roles?|positions?|opportunit(?:y|ies)|recruitment|tenders?).{0,45}(search|find|list|discover|fetch|query)|\bget[_\s-]?(jobs?|vacanc(?:y|ies)|open.?roles?|positions?|opportunit(?:y|ies)|tenders?)\b/i.test(identity)
           && !/(apply|submit|application|delete|remove|update|create)/i.test(tool.name);
       });
       if (candidate) matches.push({ server: entry.config, tool: candidate.name, argumentsTemplate: {}, inputSchema: candidate.inputSchema, configured: false });
