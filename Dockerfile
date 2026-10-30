@@ -21,6 +21,7 @@ COPY --from=openings-build /out/openings-mcp /usr/local/bin/openings-mcp
 
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
+RUN npm install --global @jobdatalake/mcp-server@1.0.11
 RUN npx playwright install --with-deps chromium
 
 COPY . .
