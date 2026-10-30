@@ -158,7 +158,7 @@ function buildSearchQueries(profile) {
     'linkedin.com/jobs','naukri.com','indeed.com','foundit.in','apna.co','glassdoor.com','wellfound.com/jobs'
   ];
   for(const domain of boardDomains)add('site:'+domain+' '+role+' '+place+' jobs');
-  add('site:cutshort.io OR site:instahyre.com OR site:hirist.com OR site:iimjobs.com OR site:shine.com '+role+' '+place+' jobs');
+  add('site:cutshort.io OR site:instahyre.com OR site:hirist.com OR site:iimjobs.com OR site:shine.com OR site:workindia.in OR site:internshala.com OR site:freshersworld.com OR site:timesjobs.com OR site:monster.com OR site:ziprecruiter.com OR site:dice.com OR site:simplyhired.com '+role+' '+place+' jobs');
   const atsDomains=[
     'boards.greenhouse.io','job-boards.greenhouse.io','jobs.lever.co','jobs.ashbyhq.com',
     'myworkdayjobs.com','jobs.smartrecruiters.com','jobs.workable.com','jobs.jobvite.com','jobs.icims.com'
@@ -189,7 +189,7 @@ function isJobUrl(raw,evidence='') {
   if(blocked)return false;
   const pathSignal=/(?:^|[\/_-])(?:jobs?|job-listings?|job-openings?|careers?|career-opportunities|positions?|openings?|vacancies|recruitment|recruiting|employment|join-us|work-with-us|internships?|apprenticeships?|fellowships?|notifications?|advertisements?|recruitment-notice|tenders?|procurement|rfp|rfi|eoi|bids?|solicitations?)(?:[\/?._-]|$)/i.test(p);
   const ats=/greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|smartrecruiters\.com|workable\.com|icims\.com|jobvite\.com|successfactors\.|oraclecloud\.com|teamtailor\.com|breezy\.hr|recruitee\.com|pinpoint\.com/i.test(h)&&u.pathname.split('/').filter(Boolean).length>=1;
-  const domains=['linkedin.com','naukri.com','indeed.com','foundit.in','apna.co','wellfound.com','glassdoor.com','builtin.com','ziprecruiter.com','cutshort.io','instahyre.com','hirist.com','iimjobs.com','shine.com'];
+  const domains=['linkedin.com','naukri.com','indeed.com','foundit.in','apna.co','wellfound.com','glassdoor.com','builtin.com','ziprecruiter.com','cutshort.io','instahyre.com','hirist.com','iimjobs.com','shine.com','workindia.in','internshala.com','freshersworld.com','timesjobs.com','monster.com','dice.com','simplyhired.com'];
   const knownBoard=domains.some(d=>h===d||h.endsWith('.'+d))&&u.pathname.split('/').filter(Boolean).length>=1;
   const evidenceSignal=/(job|career|vacanc|recruit|hiring|tender|procurement|\brfp\b|\beoi\b|expression of interest|notification|internship|fellowship|employment opportunity|position available)/i.test(String(evidence||''));
   return pathSignal||ats||knownBoard||(evidenceSignal&&u.pathname.split('/').filter(Boolean).length>=1);
@@ -342,8 +342,11 @@ async function discover(args,limit) {
       });
     }
   }
-  const linkCandidates=[...linkedCandidates.values()],secondaryLimit=Math.max(0,pageBudget-crawled.length);
-  const linkedCrawled=await concurrent(linkCandidates.slice(0,secondaryLimit),envInt('SERPER_SEARCH_PAGE_CRAWL_CONCURRENCY',20,1,20),async candidate=>({candidate,page:await crawl(candidate.url)}));
+  const linkCandidates=[...linkedCandidates.values()],secondarySlots=Math.max(0,pageBudget-crawled.length);
+  const linkedFetchLimit=Math.min(linkCandidates.length,Math.floor(secondarySlots*0.4));
+  const extraIndexedCandidates=candidates.slice(primaryFetchLimit,primaryFetchLimit+secondarySlots-linkedFetchLimit);
+  const secondaryPlan=[...linkCandidates.slice(0,linkedFetchLimit),...extraIndexedCandidates];
+  const linkedCrawled=await concurrent(secondaryPlan,envInt('SERPER_SEARCH_PAGE_CRAWL_CONCURRENCY',20,1,20),async candidate=>({candidate,page:await crawl(candidate.url)}));
   const allCrawled=[...crawled,...linkedCrawled],unique=new Map();
   let structured=0,metadata=0;
   for(const item of allCrawled){
@@ -392,7 +395,7 @@ async function discover(args,limit) {
     failedSearchRequests:failures,rejectedUrlResults:rejectedUrl,
     rejectedRoleResults:rejectedRole,rejectedLocationResults:rejectedLocation,
     opportunityTypes:kinds,
-    truncated:records.length>jobs.length||candidates.length>=target*1.2||linkCandidates.length>secondaryLimit
+    truncated:records.length>jobs.length||candidates.length>=target*1.2||linkCandidates.length>linkedFetchLimit
   }};
 }
 async function search(args) {
