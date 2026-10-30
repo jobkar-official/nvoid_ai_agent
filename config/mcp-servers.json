@@ -657,5 +657,18 @@
         }
       }
     }
+  },
+  {
+    "id": "serper-research",
+    "name": "Serper Public Web Research and Page Crawler",
+    "enabled": false,
+    "transport": "stdio",
+    "command": "node",
+    "args": [
+      "./scripts/search-engine-research-mcp-server.cjs"
+    ],
+    "env": {
+      "SERPER_API_KEY": "${SERPER_API_KEY}"
+    }
   }
 ]
