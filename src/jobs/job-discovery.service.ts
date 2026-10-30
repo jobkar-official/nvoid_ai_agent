@@ -115,7 +115,8 @@ export class JobDiscoveryService {
           ? await this.callJobicyWithCache(entry.server.id, entry.tool, sourceArgs)
           : await this.mcpRegistry.callTool(entry.server.id, entry.tool, sourceArgs);
         const searchId = extractSearchId(result);
-        const rawJobs = parseMcpJobResult(result).map((raw) => {
+        const parsedJobs = entry.server.id === 'jobdatalake' ? parseJobDataLakeSearchResult(result) : parseMcpJobResult(result);
+        const rawJobs = parsedJobs.map((raw) => {
           if (!searchId || !raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
           return { ...(raw as Record<string, unknown>), search_id: searchId };
         });
@@ -221,7 +222,7 @@ export class JobDiscoveryService {
 
     try {
       const result = await this.mcpRegistry.callTool(serverId, detailTool.name, args);
-      const detailRecords = parseMcpJobResult(result);
+      const detailRecords = serverId === 'jobdatalake' ? parseJobDataLakeDetailResult(result) : parseMcpJobResult(result);
       const detail = detailRecords.find((value) => value && typeof value === 'object' && !Array.isArray(value)) as Record<string, unknown> | undefined;
       if (!detail) return { job, serverId, fetched: false, tool: detailTool.name };
       const raw = { ...(job.raw ?? {}), ...detail };
@@ -269,7 +270,93 @@ export class JobDiscoveryService {
 }
 
 
-export function extractSearchId(value: unknown, depth = 0): string | undefined {
+export 
+export function parseJobDataLakeSearchResult(result: unknown): unknown[] {
+  const text = extractMcpText(result);
+  if (!text) return [];
+  const lines = text.split(/\r?\n/);
+  const jobs: Array<Record<string, unknown>> = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const heading = /^\s*\d+\.\s+\*\*(.+?)\*\*\s+at\s+(.+?)\s*$/.exec(lines[index]);
+    if (!heading) continue;
+    const locationLine = lines[index + 1]?.trim() ?? '';
+    const skillsLine = lines[index + 2]?.trim() ?? '';
+    const applyLine = lines[index + 3]?.trim() ?? '';
+    const idLine = lines[index + 4]?.trim() ?? '';
+    const locationParts = locationLine.split(/\s+\|\s+/);
+    const apply = /^Apply:\s*(.*)$/i.exec(applyLine)?.[1]?.trim() ?? '';
+    const handle = /^ID:\s*(.*)$/i.exec(idLine)?.[1]?.trim() ?? '';
+    const skills = /^Skills:\s*(.*)$/i.exec(skillsLine)?.[1]?.trim() ?? '';
+    if (!handle || !/^Apply:/i.test(applyLine) || !/^ID:/i.test(idLine)) continue;
+
+    jobs.push({
+      id: handle,
+      job_handle: handle,
+      title: heading[1].trim(),
+      company: heading[2].trim(),
+      location: locationParts[0] || undefined,
+      workMode: locationParts[1] || undefined,
+      salary: locationParts.slice(2).join(' | ') || undefined,
+      skills,
+      description: skills ? `Required skills: ${skills}` : undefined,
+      url: apply || undefined,
+      applicationUrl: apply || undefined,
+      source: 'jobdatalake',
+    });
+    index += 4;
+  }
+
+  return jobs;
+}
+
+export function parseJobDataLakeDetailResult(result: unknown): unknown[] {
+  const text = extractMcpText(result);
+  if (!text) return [];
+  const lines = text.split(/\r?\n/);
+  const heading = /^\*\*(.+?)\*\*\s+at\s+(.+?)\s*$/.exec(lines[0]?.trim() ?? '');
+  if (!heading) return [];
+  const separatorIndex = lines.findIndex((line) => line.trim() === '---');
+  const metadata = lines.slice(0, separatorIndex >= 0 ? separatorIndex : lines.length);
+  const readField = (label: string) => {
+    const prefix = `${label.toLowerCase()}:`;
+    const line = metadata.find((item) => item.trim().toLowerCase().startsWith(prefix));
+    return line ? line.trim().slice(prefix.length).trim() : undefined;
+  };
+  const description = separatorIndex >= 0 ? lines.slice(separatorIndex + 1).join('\n').trim() : undefined;
+  const raw: Record<string, unknown> = {
+    title: heading[1].trim(),
+    company: heading[2].trim(),
+    location: readField('Location'),
+    salary: readField('Salary'),
+    seniority: readField('Seniority'),
+    experience_level: readField('Seniority'),
+    skills: readField('Skills'),
+    employment_type: readField('Type'),
+    job_type: readField('Type'),
+    applicationUrl: readField('Apply'),
+    url: readField('Apply'),
+    description,
+    workMode: readField('Location')?.toLowerCase().includes('remote') ? 'Remote' : undefined,
+  };
+  return [raw];
+}
+
+function extractMcpText(result: unknown): string | undefined {
+  if (!result || typeof result !== 'object') return undefined;
+  const root = result as Record<string, unknown>;
+  if (Array.isArray(root.content)) {
+    const texts = root.content
+      .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+      .map((item) => item.text)
+      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+    if (texts.length) return texts.join('\n');
+  }
+  if (typeof root.text === 'string') return root.text;
+  return undefined;
+}
+
+function extractSearchId(value: unknown, depth = 0): string | undefined {
   if (depth > 8 || value === null || value === undefined) return undefined;
   if (typeof value === 'string') {
     const text = value.trim();
@@ -312,7 +399,7 @@ export function buildJobDetailArguments(schemaValue: unknown, job: NormalizedJob
   const properties = schema.properties ?? {};
   if (Object.keys(properties).length === 0) return undefined;
   const raw = job.raw ?? {};
-  const jobId = raw.id ?? raw.jobId ?? raw.job_id ?? raw.jobKey ?? raw.job_key ?? raw.key ?? raw.slug ?? job.sourceJobId;
+  const jobId = raw.id ?? raw.jobId ?? raw.job_id ?? raw.jobKey ?? raw.job_key ?? raw.job_handle ?? raw.jobHandle ?? raw.key ?? raw.slug ?? job.sourceJobId;
   const searchId = raw.search_id ?? raw.searchId ?? raw.searchID;
   const country = raw.country ?? raw.country_name ?? profile.countries?.[0] ?? inferCountry(profile);
   const args: Record<string, unknown> = {};
@@ -323,7 +410,7 @@ export function buildJobDetailArguments(schemaValue: unknown, job: NormalizedJob
     let value: unknown;
     if (compact === 'searchid' || compact === 'searchidentifier') value = searchId;
     else if (compact === 'jobids' || compact === 'ids') value = jobId === undefined ? undefined : [String(jobId)];
-    else if (/^(id|jobid|jobkey|key|jobcode|slug|jobslug|jobidentifier)$/.test(compact)) value = jobId;
+    else if (/^(id|jobid|jobkey|jobhandle|key|jobcode|slug|jobslug|jobidentifier)$/.test(compact)) value = jobId;
     else if (/^(url|joburl|jobpostingurl|postingurl|link)$/.test(compact)) value = job.jobUrl ?? job.applicationUrl;
     else if (/^(country|countryname|countrycode)$/.test(compact)) value = country;
     else if (/^(company|companyname|employer)$/.test(compact)) value = job.company;
