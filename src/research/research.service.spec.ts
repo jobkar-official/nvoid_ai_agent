@@ -40,6 +40,12 @@ describe('read-only research tool selection', () => {
     expect(isReadOnlyResearchTool({ name: 'list_companies' })).toBe(true);
     expect(isReadOnlyResearchTool({ name: 'create_contact' })).toBe(false);
   });
+
+  it('recognizes camelCase search tools and blocks camelCase mutations', () => {
+    expect(isReadOnlyResearchTool({ name: 'searchContacts' })).toBe(true);
+    expect(isReadOnlyResearchTool({ name: 'getIssues' })).toBe(true);
+    expect(isReadOnlyResearchTool({ name: 'submitApplication' })).toBe(false);
+  });
 });
 
 describe('research MCP argument mapping', () => {
