@@ -101,6 +101,30 @@ function extractPage(html, url) {
   };
 }
 
+async function readTextLimited(response, maxBytes) {
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let size = 0;
+  let output = '';
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      size += chunk.value.byteLength;
+      if (size > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new Error('Page exceeds the public crawl size limit.');
+      }
+      output += decoder.decode(chunk.value, { stream: true });
+    }
+    output += decoder.decode();
+    return output;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 async function fetchPublicPage(rawUrl) {
   let current = await publicUrl(rawUrl);
   for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -122,8 +146,7 @@ async function fetchPublicPage(rawUrl) {
     }
     const declaredLength = Number(response.headers.get('content-length') || 0);
     if (declaredLength > MAX_BODY_BYTES) throw new Error('Page exceeds the public crawl size limit.');
-    const html = await response.text();
-    if (Buffer.byteLength(html, 'utf8') > MAX_BODY_BYTES) throw new Error('Page exceeds the public crawl size limit.');
+    const html = await readTextLimited(response, MAX_BODY_BYTES);
     return { ...extractPage(html, current.href), finalUrl: current.href, httpStatus: response.status, contentType };
   }
   throw new Error('Too many redirects.');
