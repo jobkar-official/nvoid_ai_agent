@@ -41,6 +41,27 @@ describe('McpRegistryService job-search tool discovery', () => {
     expect(sources[0].configured).toBe(false);
   });
 
+  it('recognizes get_jobs as a listing tool on an MCP connector', () => {
+    const config: McpServerConfig = {
+      id: 'public-job-feed',
+      name: 'Public Job Feed MCP',
+      enabled: true,
+      transport: 'http',
+      url: 'https://mcp.example.test',
+      jobSearch: { tool: 'REPLACE_WITH_ACTUAL_SEARCH_TOOL_NAME', arguments: {} },
+    };
+    const service = createService(config, [{
+      name: 'get_jobs',
+      description: 'Returns matching open jobs',
+      inputSchema: { type: 'object', properties: { query: { type: 'string' }, location: { type: 'string' } }, required: ['query', 'location'] },
+    }]);
+
+    const sources = service.getJobSearchServers();
+
+    expect(sources).toHaveLength(1);
+    expect(sources[0].tool).toBe('get_jobs');
+  });
+
   it('keeps an explicitly configured tool when that tool exists', () => {
     const config: McpServerConfig = {
       id: 'custom-jobs',
