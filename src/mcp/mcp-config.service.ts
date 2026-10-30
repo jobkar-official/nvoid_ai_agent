@@ -44,6 +44,11 @@ export class McpConfigService {
       });
       const canEnable =
         server.id === 'serper-search' && has('SERPER_API_KEY') ||
+        server.id === 'naukri' && has('NAUKRI_MCP_URL', 'NAUKRI_MCP_TOKEN') ||
+        server.id === 'indeed' && has('INDEED_MCP_URL', 'INDEED_MCP_TOKEN') ||
+        server.id === 'linkedin' && has('LINKEDIN_MCP_URL', 'LINKEDIN_MCP_TOKEN') ||
+        server.id === 'glassdoor' && has('GLASSDOOR_MCP_URL', 'GLASSDOOR_MCP_TOKEN') ||
+        server.id === 'apna' && has('APNA_MCP_URL', 'APNA_MCP_TOKEN') ||
         server.id === 'greenhouse' && has('GREENHOUSE_BOARDS') ||
         server.id === 'lever' && has('LEVER_SITES') ||
         server.id === 'ashby' && has('ASHBY_BOARDS') ||
