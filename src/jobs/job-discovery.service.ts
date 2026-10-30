@@ -13,7 +13,7 @@ export interface SearchResult {
   returnedCount: number;
   sourceCount: number;
   jobs: NormalizedJob[];
-  sources: Array<{ serverId: string; tool: string; found: number; error?: string; report?: SearchSourceReport }>;
+  sources: Array<{ serverId: string; tool: string; found: number; error?: string; report?: SearchSourceReport; detailsRequested?: number; detailsFetched?: number; detailTool?: string }>;
   searchReport: SearchSourceReport[];
   backendSync: { synced: boolean; reason?: string };
 }
@@ -81,7 +81,7 @@ export class JobDiscoveryService {
       throw new ServiceUnavailableException('No connected MCP server has a configured or discoverable job-search tool. Configure jobSearch.tool for each MCP server in config/mcp-servers.json.');
     }
 
-    const sourceResults: Array<{ serverId: string; tool: string; jobs: NormalizedJob[]; error?: string; report?: SearchSourceReport }> = await Promise.all(servers.map(async (entry) => {
+    const sourceResults: Array<{ serverId: string; tool: string; jobs: NormalizedJob[]; error?: string; report?: SearchSourceReport; detailsRequested?: number; detailsFetched?: number; detailTool?: string }> = await Promise.all(servers.map(async (entry) => {
       try {
         const args = entry.configured
           ? resolveTemplate(entry.argumentsTemplate, { profile: effectiveProfile, limit: requestedLimit })
@@ -178,12 +178,19 @@ export class JobDiscoveryService {
       }
     }
     const detailTargets = [...detailTargetsBySource.values()].flat().slice(0, 24);
-    const detailedJobs = await Promise.all(detailTargets.map((job) => this.enrichJobDetails(
+    const detailResults = await Promise.all(detailTargets.map((job) => this.enrichJobDetails(
       job,
       sourceForJobId.get(job.id),
       profile,
     )));
-    const detailById = new Map(detailedJobs.map((job) => [job.id, job]));
+    const detailById = new Map(detailResults.map((result) => [result.job.id, result.job]));
+    for (const sourceResult of sourceResults) {
+      const requested = detailTargetsBySource.get(sourceResult.serverId) ?? [];
+      const providerDetails = detailResults.filter((result) => result.serverId === sourceResult.serverId);
+      sourceResult.detailsRequested = requested.length;
+      sourceResult.detailsFetched = providerDetails.filter((result) => result.fetched).length;
+      sourceResult.detailTool = providerDetails.find((result) => result.tool)?.tool;
+    }
     const rankedWithDetails = initiallyRanked.map((job) => detailById.get(job.id) ?? job);
     const aiCandidates = rankedWithDetails.slice(0, Math.min(100, rankedWithDetails.length));
     const AIranked = await this.aiAgent.rerankJobs(profile, aiCandidates);
@@ -197,43 +204,49 @@ export class JobDiscoveryService {
       returnedCount: jobs.length,
       sourceCount: sourceResults.length,
       jobs,
-      sources: sourceResults.map((entry) => ({ serverId: entry.serverId, tool: entry.tool, found: entry.jobs.length, error: entry.error, report: entry.report })),
+      sources: sourceResults.map((entry) => ({ serverId: entry.serverId, tool: entry.tool, found: entry.jobs.length, error: entry.error, report: entry.report, detailsRequested: entry.detailsRequested, detailsFetched: entry.detailsFetched, detailTool: entry.detailTool })),
       searchReport: sourceResults.flatMap((entry) => entry.report ? [entry.report] : []),
       backendSync,
     };
   }
 
 
-  private async enrichJobDetails(job: NormalizedJob, serverId: string | undefined, profile: JobProfile): Promise<NormalizedJob> {
-    if (!serverId) return job;
+  private async enrichJobDetails(job: NormalizedJob, serverId: string | undefined, profile: JobProfile): Promise<{ job: NormalizedJob; serverId?: string; fetched: boolean; tool?: string }> {
+    if (!serverId) return { job, fetched: false };
     const tools = this.mcpRegistry.getToolCatalog(serverId).flatMap((entry) => entry.tools);
     const detailTool = tools.find((tool) => isJobDetailTool(tool.name));
-    if (!detailTool) return job;
+    if (!detailTool) return { job, serverId, fetched: false };
     const args = buildJobDetailArguments(detailTool.inputSchema, job, profile);
-    if (!args) return job;
+    if (!args) return { job, serverId, fetched: false, tool: detailTool.name };
 
     try {
       const result = await this.mcpRegistry.callTool(serverId, detailTool.name, args);
       const detailRecords = parseMcpJobResult(result);
       const detail = detailRecords.find((value) => value && typeof value === 'object' && !Array.isArray(value)) as Record<string, unknown> | undefined;
-      if (!detail) return job;
+      if (!detail) return { job, serverId, fetched: false, tool: detailTool.name };
       const raw = { ...(job.raw ?? {}), ...detail };
       const normalized = normalizeJob(raw, job.source, profile);
-      if (!normalized) return { ...job, raw };
+      if (!normalized) return { job: { ...job, raw }, serverId, fetched: true, tool: detailTool.name };
       const match = calculateMatchScore(raw, normalized.title, normalized.location, profile);
       return {
-        ...job,
-        ...normalized,
-        matchScore: Math.max(job.matchScore, normalized.matchScore, match.score),
-        matchReasons: [...new Set([...job.matchReasons, ...normalized.matchReasons, ...match.reasons])],
-        raw,
+        job: {
+          ...job,
+          ...normalized,
+          matchScore: Math.max(job.matchScore, normalized.matchScore, match.score),
+          matchReasons: [...new Set([...job.matchReasons, ...normalized.matchReasons, ...match.reasons])],
+          raw,
+        },
+        serverId,
+        fetched: true,
+        tool: detailTool.name,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.debug(`Job detail lookup skipped for ${serverId}/${detailTool.name}: ${message}`);
-      return job;
+      return { job, serverId, fetched: false, tool: detailTool.name };
     }
   }
+
 
   private async callJobicyWithCache(serverId: string, tool: string, args: Record<string, unknown>): Promise<unknown> {
     const cacheKey = JSON.stringify({ serverId, tool, tag: args.tag, geo: args.geo });
