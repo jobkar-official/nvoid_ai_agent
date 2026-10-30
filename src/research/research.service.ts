@@ -3,7 +3,7 @@ import { AiAgentService, type PlannedResearchCall } from '../common/ai-agent.ser
 import { McpRegistryService } from '../mcp/mcp-registry.service';
 import type { ResearchRunDto } from './research.dto';
 
-type JsonSchema = {
+export type JsonSchema = {
   type?: string;
   properties?: Record<string, JsonSchema>;
   required?: string[];
