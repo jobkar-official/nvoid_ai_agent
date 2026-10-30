@@ -7,6 +7,7 @@ import { HealthController } from './health.controller';
 import { McpModule } from './mcp/mcp.module';
 import { JobsModule } from './jobs/jobs.module';
 import { AgentModule } from './agent/agent.module';
+import { ResearchModule } from './research/research.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { AgentModule } from './agent/agent.module';
     JobsModule,
     ApplicationsModule,
     AgentModule,
+    ResearchModule,
   ],
   controllers: [HealthController],
 })

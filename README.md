@@ -28,6 +28,33 @@ These sources automatically enable after the relevant credentials are present in
 
 The synthetic demo MCP source is disabled in `config/mcp-servers.json` and isolated in `config/mcp-servers.test.json` for CI. MCP servers connected in ChatGPT or another desktop host are not automatically available to this worker; configure their actual MCP endpoint and credentials here.
 
+## General-purpose live MCP research
+
+Nvoid also exposes a separate natural-language research workflow. It is not restricted to job listings or candidate profiles.
+
+- `GET /api/research/tools` returns the actual connected MCP servers and the tools that can safely be treated as read-only research operations, including published MCP read-only/destructive annotations where supplied.
+- `POST /api/research/run` accepts a research question, optional connected server IDs, a maximum record count (1–1,000), and a maximum tool-call count (1–40).
+- When `LLM_API_KEY` and `LLM_MODEL` are configured, the query planner selects relevant tools across connected MCP servers and prepares arguments against each tool's published JSON input schema. Calls are checked again against the connected tool catalog and schema before execution.
+- Without an LLM, Nvoid uses a schema-aware query/limit/location mapper and read-operation discovery as a fallback. It refuses to invent unknown required values such as account IDs or credentials.
+- The public-web search connector expands plain-language queries into deterministic Google dorks (exact phrase, `intitle:`, `inurl:`, `filetype:pdf`, and job-specific `site:linkedin.com/jobs` / `site:naukri.com` variants), unless the user already supplied explicit dork operators. Pagination is distributed across variants so the earliest query does not consume the entire request budget. With an LLM enabled, the planner can add further query variants.
+- Selected tools execute concurrently with a bounded worker pool. Actual MCP responses are parsed, normalized, deduplicated, capped, and returned with per-tool status, duration, result counts, connector coverage, warnings, and source attribution.
+- The research route never automatically invokes tools identified as mutating or destructive. MCP tool annotations are honored, and mutation-style tool names are denied even when a server incorrectly marks them read-only. This is a safety default, not a substitute for reviewing the permissions granted to each MCP endpoint.
+
+Example request:
+
+```json
+{
+  "query": "Find companies hiring machine-learning engineers in Bengaluru and return the source records",
+  "serverIds": ["my-company-data", "public-search"],
+  "maxRecords": 250,
+  "maxTools": 20
+}
+```
+
+The response contains the exact query, planner mode, actual tool calls and their success/failure states, result records with connector/tool provenance, and a dynamic report calculated from returned data. It does not claim that an unconnected source was searched or that a requested record count was achieved when providers returned fewer records.
+
+**Connector boundary:** MCP servers and OAuth connections inside ChatGPT or Claude are private to those host applications; they are not automatically exposed to a separate Nvoid process. To use the same platform from Nvoid, configure the actual MCP server endpoint and a Nvoid-authorized credential in `config/mcp-servers.json` and the worker's server-side environment. A connector that provides no endpoint or exportable authorization cannot be invoked by Nvoid.
+
 ## Features
 
 - MCP client registry for multiple remote Streamable HTTP servers, legacy HTTP+SSE servers, and local stdio servers.

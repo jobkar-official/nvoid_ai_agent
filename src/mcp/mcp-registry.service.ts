@@ -7,7 +7,19 @@ import { withTimeout } from '../common/async';
 import { McpConfigService } from './mcp-config.service';
 
 type SupportedTransport = StreamableHTTPClientTransport | SSEClientTransport | StdioClientTransport;
-type ToolInfo = { name: string; description?: string; inputSchema?: unknown; outputSchema?: unknown };
+type ToolInfo = {
+  name: string;
+  description?: string;
+  inputSchema?: unknown;
+  outputSchema?: unknown;
+  annotations?: {
+    title?: string;
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
+};
 
 interface ConnectedMcpServer {
   config: McpServerConfig;
@@ -153,6 +165,13 @@ export class McpRegistryService implements OnApplicationBootstrap, OnModuleDestr
         description: tool.description,
         inputSchema: tool.inputSchema,
         outputSchema: 'outputSchema' in tool ? tool.outputSchema : undefined,
+        annotations: 'annotations' in tool && tool.annotations ? {
+          title: tool.annotations.title,
+          readOnlyHint: tool.annotations.readOnlyHint,
+          destructiveHint: tool.annotations.destructiveHint,
+          idempotentHint: tool.annotations.idempotentHint,
+          openWorldHint: tool.annotations.openWorldHint,
+        } : undefined,
       }));
 
       const connected: ConnectedMcpServer = { config: serverConfig, client, transport, tools, connected: true };
@@ -204,6 +223,7 @@ export class McpRegistryService implements OnApplicationBootstrap, OnModuleDestr
       'SERPER_SEARCH_MAX_RESULTS', 'SERPER_SEARCH_MAX_QUERIES', 'SERPER_SEARCH_MAX_PAGES_PER_QUERY',
       'SERPER_SEARCH_MAX_REQUESTS', 'SERPER_SEARCH_MAX_PAGE_FETCHES', 'SERPER_SEARCH_CONCURRENCY',
       'SERPER_SEARCH_PAGE_CRAWL_CONCURRENCY',
+      'NVOID_WEB_SEARCH_MAX_PAGES', 'NVOID_WEB_SEARCH_MAX_REQUESTS', 'NVOID_WEB_CRAWL_MAX_PAGES', 'NVOID_WEB_CRAWL_CONCURRENCY',
     ];
     const inheritedEnv = Object.fromEntries(
       inheritedEnvKeys
