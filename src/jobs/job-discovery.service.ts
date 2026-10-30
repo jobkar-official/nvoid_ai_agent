@@ -270,8 +270,8 @@ export class JobDiscoveryService {
 }
 
 
-export 
-export export function parseJobDataLakeSearchResult(result: unknown): unknown[] {
+
+export function parseJobDataLakeSearchResult(result: unknown): unknown[] {
   const text = extractMcpText(result);
   if (!text) return [];
   const lines = text.split(/\r?\n/);
@@ -310,7 +310,7 @@ export export function parseJobDataLakeSearchResult(result: unknown): unknown[] 
   return jobs;
 }
 
-export export function parseJobDataLakeDetailResult(result: unknown): unknown[] {
+export function parseJobDataLakeDetailResult(result: unknown): unknown[] {
   const text = extractMcpText(result);
   if (!text) return [];
   const lines = text.split(/\r?\n/);
@@ -356,7 +356,7 @@ function extractMcpText(result: unknown): string | undefined {
   return undefined;
 }
 
-function extractSearchId(value: unknown, depth = 0): string | undefined {
+export function extractSearchId(value: unknown, depth = 0): string | undefined {
   if (depth > 8 || value === null || value === undefined) return undefined;
   if (typeof value === 'string') {
     const text = value.trim();
