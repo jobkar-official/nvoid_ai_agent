@@ -57,6 +57,7 @@ export class AiAgentService {
           'Put the complete user research question in the best matching query/search/input parameter when that is appropriate.',
           'Set limit/count/page-size parameters no higher than the requested record limit.',
           'Prefer tools that search, list, query, fetch, or retrieve relevant records. Include multiple distinct connected servers when useful.',
+          'For public web search tools that accept a queries array, provide up to 5 complementary, precise query variants with Google dork operators when useful. Keep the original question as the primary query and do not invent facts.',
           'Return JSON only with shape: {"calls":[{"serverId":"exact id","toolName":"exact name","arguments":{},"reason":"brief reason"}]}.',
           'Return at most ' + maxCalls + ' calls. Do not return tools outside the catalog.',
         ].join(' '),
