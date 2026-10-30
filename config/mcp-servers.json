@@ -230,7 +230,7 @@
   },
   {
     "id": "naukri",
-    "name": "Naukri MCP (requires authorized connector)",
+    "name": "Naukri MCP (upstream scraper currently hard-filters AI/ML; Naukri is searched through JobSpy)",
     "enabled": false,
     "transport": "http",
     "url": "${NAUKRI_MCP_URL}",
@@ -238,23 +238,16 @@
       "Authorization": "Bearer ${NAUKRI_MCP_TOKEN}"
     },
     "jobSearch": {
-      "tool": "REPLACE_WITH_ACTUAL_SEARCH_TOOL_NAME",
+      "tool": "search_naukri_jobs",
       "arguments": {
-        "query": {
+        "role": {
           "$profile": "jobTitle"
         },
         "location": {
           "$profile": "location"
         },
-        "limit": {
-          "$context": "limit"
-        },
-        "skills": {
-          "$profile": "skills"
-        },
-        "keywords": {
-          "$profile": "keywords"
-        }
+        "posted_within_days": 30,
+        "max_pages": 1
       }
     }
   },
@@ -290,7 +283,7 @@
   },
   {
     "id": "linkedin",
-    "name": "LinkedIn Jobs MCP (requires approved access)",
+    "name": "LinkedIn OAuth API MCP (requires approved LinkedIn API access and OAuth credentials)",
     "enabled": false,
     "transport": "http",
     "url": "${LINKEDIN_MCP_URL}",
@@ -298,22 +291,13 @@
       "Authorization": "Bearer ${LINKEDIN_MCP_TOKEN}"
     },
     "jobSearch": {
-      "tool": "REPLACE_WITH_ACTUAL_SEARCH_TOOL_NAME",
+      "tool": "search-jobs",
       "arguments": {
-        "query": {
+        "keywords": {
           "$profile": "jobTitle"
         },
         "location": {
           "$profile": "location"
-        },
-        "limit": {
-          "$context": "limit"
-        },
-        "skills": {
-          "$profile": "skills"
-        },
-        "keywords": {
-          "$profile": "keywords"
         }
       }
     }
@@ -669,6 +653,167 @@
     ],
     "env": {
       "SERPER_API_KEY": "${SERPER_API_KEY}"
+    }
+  },
+  {
+    "id": "mcp-jobspy-speedyapply",
+    "name": "JobSpy Universal — LinkedIn, Indeed, Naukri, Glassdoor, ZipRecruiter, Bayt, BDJobs, HelloWork",
+    "enabled": true,
+    "transport": "stdio",
+    "command": "uvx",
+    "args": [
+      "mcp-jobspy@latest"
+    ],
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "search_term": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "site_name": [
+          "linkedin",
+          "indeed",
+          "zip_recruiter",
+          "glassdoor",
+          "bayt",
+          "naukri"
+        ],
+        "results_wanted": 10,
+        "hours_old": 720,
+        "is_remote": false,
+        "country_indeed": "India",
+        "fetch_description": false,
+        "description_format": "markdown"
+      }
+    }
+  },
+  {
+    "id": "linkedin-mcp-zero",
+    "name": "LinkedIn MCP Zero — public LinkedIn job search and full-detail lookup",
+    "enabled": true,
+    "transport": "stdio",
+    "command": "uvx",
+    "args": [
+      "linkedin-mcp-zero"
+    ],
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "kw": {
+          "$profile": "jobTitle"
+        },
+        "loc": {
+          "$profile": "location"
+        },
+        "limit": 50,
+        "age": "r2592000"
+      }
+    }
+  },
+  {
+    "id": "openings-mcp",
+    "name": "Openings MCP — LinkedIn and other global job boards / company ATS",
+    "enabled": true,
+    "transport": "stdio",
+    "command": "/usr/local/bin/openings-mcp",
+    "args": [],
+    "jobSearch": {
+      "tool": "linkedin_search_jobs",
+      "arguments": {
+        "keyword": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "posted_within": "Past month",
+        "start": 0
+      }
+    }
+  },
+  {
+    "id": "himalayas-mcp",
+    "name": "Himalayas Remote Jobs MCP — public search, salary and company research",
+    "enabled": true,
+    "transport": "http",
+    "url": "https://mcp.himalayas.app/mcp"
+  },
+  {
+    "id": "aidevboard",
+    "name": "AI Dev Jobs MCP — 55+ ATS sources for AI/ML/LLM roles",
+    "enabled": true,
+    "transport": "http",
+    "url": "https://aidevboard.com/mcp",
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "limit": 50
+      }
+    }
+  },
+  {
+    "id": "indeed-official",
+    "name": "Indeed Official MCP (OAuth sign-in required; worker OAuth flow not configured)",
+    "enabled": false,
+    "transport": "http",
+    "url": "https://mcp.indeed.com/claude/mcp",
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        }
+      }
+    }
+  },
+  {
+    "id": "jobo-mcp",
+    "name": "Jobo Global Jobs MCP (OAuth 2.1 jobs:read sign-in required)",
+    "enabled": false,
+    "transport": "http",
+    "url": "https://jobs-mcp.jobo.world/mcp",
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "limit": 50
+      }
+    }
+  },
+  {
+    "id": "jobdatalake",
+    "name": "JobDataLake — 1M+ enriched jobs across 40+ ATS platforms",
+    "enabled": true,
+    "transport": "stdio",
+    "command": "mcp-server",
+    "args": [],
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "posted_within": "30d",
+        "sort_by": "posted_at:desc",
+        "per_page": 50
+      }
     }
   }
 ]

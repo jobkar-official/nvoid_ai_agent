@@ -13,7 +13,7 @@ export interface SearchResult {
   returnedCount: number;
   sourceCount: number;
   jobs: NormalizedJob[];
-  sources: Array<{ serverId: string; tool: string; found: number; error?: string; report?: SearchSourceReport }>;
+  sources: Array<{ serverId: string; tool: string; found: number; error?: string; report?: SearchSourceReport; detailsRequested?: number; detailsFetched?: number; detailTool?: string }>;
   searchReport: SearchSourceReport[];
   backendSync: { synced: boolean; reason?: string };
 }
@@ -81,7 +81,7 @@ export class JobDiscoveryService {
       throw new ServiceUnavailableException('No connected MCP server has a configured or discoverable job-search tool. Configure jobSearch.tool for each MCP server in config/mcp-servers.json.');
     }
 
-    const sourceResults: Array<{ serverId: string; tool: string; jobs: NormalizedJob[]; error?: string; report?: SearchSourceReport }> = await Promise.all(servers.map(async (entry) => {
+    const sourceResults: Array<{ serverId: string; tool: string; jobs: NormalizedJob[]; error?: string; report?: SearchSourceReport; detailsRequested?: number; detailsFetched?: number; detailTool?: string }> = await Promise.all(servers.map(async (entry) => {
       try {
         const args = entry.configured
           ? resolveTemplate(entry.argumentsTemplate, { profile: effectiveProfile, limit: requestedLimit })
@@ -105,11 +105,21 @@ export class JobDiscoveryService {
               location: effectiveProfile.location,
               limit: Math.min(100, requestedLimit),
             }
-          : toolArgs;
+          : entry.server.id === 'aidevboard'
+            ? {
+                ...(toolArgs ?? {}),
+                query: [effectiveProfile.jobTitle, effectiveProfile.location].filter(Boolean).join(' '),
+              }
+            : toolArgs;
         const result = entry.server.id === 'jobicy'
           ? await this.callJobicyWithCache(entry.server.id, entry.tool, sourceArgs)
           : await this.mcpRegistry.callTool(entry.server.id, entry.tool, sourceArgs);
-        const rawJobs = parseMcpJobResult(result);
+        const searchId = extractSearchId(result);
+        const parsedJobs = entry.server.id === 'jobdatalake' ? parseJobDataLakeSearchResult(result) : parseMcpJobResult(result);
+        const rawJobs = parsedJobs.map((raw) => {
+          if (!searchId || !raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+          return { ...(raw as Record<string, unknown>), search_id: searchId };
+        });
         const jobs = rawJobs
           .map((raw) => normalizeJob(raw, resolveSourceId(entry.server.id, raw), profile))
           .filter((job): job is NormalizedJob => Boolean(job))
@@ -140,11 +150,15 @@ export class JobDiscoveryService {
     }));
 
     const deduplicated = new Map<string, NormalizedJob>();
+    const sourceForJobId = new Map<string, string>();
     for (const sourceResult of sourceResults) {
       for (const job of sourceResult.jobs) {
         const dedupeKey = (job.applicationUrl ?? job.jobUrl ?? `${job.title}|${job.company ?? ''}|${job.location ?? ''}`).toLowerCase().replace(/\/$/, '');
         const existing = deduplicated.get(dedupeKey);
-        if (!existing || job.matchScore > existing.matchScore) deduplicated.set(dedupeKey, job);
+        if (!existing || job.matchScore > existing.matchScore) {
+          deduplicated.set(dedupeKey, job);
+          sourceForJobId.set(job.id, sourceResult.serverId);
+        }
       }
     }
 
@@ -154,9 +168,34 @@ export class JobDiscoveryService {
       return { ...job, matchScore: Math.max(job.matchScore, match.score), matchReasons: [...new Set([...job.matchReasons, ...match.reasons])] };
     });
     const initiallyRanked = candidates.sort((a, b) => b.matchScore - a.matchScore);
-    const aiCandidates = initiallyRanked.slice(0, Math.min(100, initiallyRanked.length));
+    const detailTargetsBySource = new Map<string, NormalizedJob[]>();
+    for (const job of initiallyRanked) {
+      const serverId = sourceForJobId.get(job.id);
+      if (!serverId) continue;
+      const sourceTargets = detailTargetsBySource.get(serverId) ?? [];
+      if (sourceTargets.length < 3) {
+        sourceTargets.push(job);
+        detailTargetsBySource.set(serverId, sourceTargets);
+      }
+    }
+    const detailTargets = [...detailTargetsBySource.values()].flat().slice(0, 24);
+    const detailResults = await Promise.all(detailTargets.map((job) => this.enrichJobDetails(
+      job,
+      sourceForJobId.get(job.id),
+      profile,
+    )));
+    const detailById = new Map(detailResults.map((result) => [result.job.id, result.job]));
+    for (const sourceResult of sourceResults) {
+      const requested = detailTargetsBySource.get(sourceResult.serverId) ?? [];
+      const providerDetails = detailResults.filter((result) => result.serverId === sourceResult.serverId);
+      sourceResult.detailsRequested = requested.length;
+      sourceResult.detailsFetched = providerDetails.filter((result) => result.fetched).length;
+      sourceResult.detailTool = providerDetails.find((result) => result.tool)?.tool;
+    }
+    const rankedWithDetails = initiallyRanked.map((job) => detailById.get(job.id) ?? job);
+    const aiCandidates = rankedWithDetails.slice(0, Math.min(100, rankedWithDetails.length));
     const AIranked = await this.aiAgent.rerankJobs(profile, aiCandidates);
-    const jobs = [...AIranked, ...initiallyRanked.slice(aiCandidates.length)].sort((a, b) => b.matchScore - a.matchScore).slice(0, requestedLimit);
+    const jobs = [...AIranked, ...rankedWithDetails.slice(aiCandidates.length)].sort((a, b) => b.matchScore - a.matchScore).slice(0, requestedLimit);
 
     let backendSync: { synced: boolean; reason?: string } = { synced: false, reason: 'Backend sync disabled for this search.' };
     if (syncToBackend) backendSync = await this.backendSync.syncJobs(profile.userId, profile, jobs);
@@ -166,11 +205,49 @@ export class JobDiscoveryService {
       returnedCount: jobs.length,
       sourceCount: sourceResults.length,
       jobs,
-      sources: sourceResults.map((entry) => ({ serverId: entry.serverId, tool: entry.tool, found: entry.jobs.length, error: entry.error, report: entry.report })),
+      sources: sourceResults.map((entry) => ({ serverId: entry.serverId, tool: entry.tool, found: entry.jobs.length, error: entry.error, report: entry.report, detailsRequested: entry.detailsRequested, detailsFetched: entry.detailsFetched, detailTool: entry.detailTool })),
       searchReport: sourceResults.flatMap((entry) => entry.report ? [entry.report] : []),
       backendSync,
     };
   }
+
+
+  private async enrichJobDetails(job: NormalizedJob, serverId: string | undefined, profile: JobProfile): Promise<{ job: NormalizedJob; serverId?: string; fetched: boolean; tool?: string }> {
+    if (!serverId) return { job, fetched: false };
+    const tools = this.mcpRegistry.getToolCatalog(serverId).flatMap((entry) => entry.tools);
+    const detailTool = tools.find((tool) => isJobDetailTool(tool.name));
+    if (!detailTool) return { job, serverId, fetched: false };
+    const args = buildJobDetailArguments(detailTool.inputSchema, job, profile);
+    if (!args) return { job, serverId, fetched: false, tool: detailTool.name };
+
+    try {
+      const result = await this.mcpRegistry.callTool(serverId, detailTool.name, args);
+      const detailRecords = serverId === 'jobdatalake' ? parseJobDataLakeDetailResult(result) : parseMcpJobResult(result);
+      const detail = detailRecords.find((value) => value && typeof value === 'object' && !Array.isArray(value)) as Record<string, unknown> | undefined;
+      if (!detail) return { job, serverId, fetched: false, tool: detailTool.name };
+      const raw = { ...(job.raw ?? {}), ...detail };
+      const normalized = normalizeJob(raw, job.source, profile);
+      if (!normalized) return { job: { ...job, raw }, serverId, fetched: true, tool: detailTool.name };
+      const match = calculateMatchScore(raw, normalized.title, normalized.location, profile);
+      return {
+        job: {
+          ...job,
+          ...normalized,
+          matchScore: Math.max(job.matchScore, normalized.matchScore, match.score),
+          matchReasons: [...new Set([...job.matchReasons, ...normalized.matchReasons, ...match.reasons])],
+          raw,
+        },
+        serverId,
+        fetched: true,
+        tool: detailTool.name,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.debug(`Job detail lookup skipped for ${serverId}/${detailTool.name}: ${message}`);
+      return { job, serverId, fetched: false, tool: detailTool.name };
+    }
+  }
+
 
   private async callJobicyWithCache(serverId: string, tool: string, args: Record<string, unknown>): Promise<unknown> {
     const cacheKey = JSON.stringify({ serverId, tool, tag: args.tag, geo: args.geo });
@@ -192,6 +269,171 @@ export class JobDiscoveryService {
   }
 }
 
+
+
+export function parseJobDataLakeSearchResult(result: unknown): unknown[] {
+  const text = extractMcpText(result);
+  if (!text) return [];
+  const lines = text.split(/\r?\n/);
+  const jobs: Array<Record<string, unknown>> = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const heading = /^\s*\d+\.\s+\*\*(.+?)\*\*\s+at\s+(.+?)\s*$/.exec(lines[index]);
+    if (!heading) continue;
+    const locationLine = lines[index + 1]?.trim() ?? '';
+    const skillsLine = lines[index + 2]?.trim() ?? '';
+    const applyLine = lines[index + 3]?.trim() ?? '';
+    const idLine = lines[index + 4]?.trim() ?? '';
+    const locationParts = locationLine.split(/\s+\|\s+/);
+    const apply = /^Apply:\s*(.*)$/i.exec(applyLine)?.[1]?.trim() ?? '';
+    const handle = /^ID:\s*(.*)$/i.exec(idLine)?.[1]?.trim() ?? '';
+    const skills = /^Skills:\s*(.*)$/i.exec(skillsLine)?.[1]?.trim() ?? '';
+    if (!handle || !/^Apply:/i.test(applyLine) || !/^ID:/i.test(idLine)) continue;
+
+    jobs.push({
+      id: handle,
+      job_handle: handle,
+      title: heading[1].trim(),
+      company: heading[2].trim(),
+      location: locationParts[0] || undefined,
+      workMode: locationParts[1] || undefined,
+      salary: locationParts.slice(2).join(' | ') || undefined,
+      skills,
+      description: skills ? `Required skills: ${skills}` : undefined,
+      url: apply || undefined,
+      applicationUrl: apply || undefined,
+      source: 'jobdatalake',
+    });
+    index += 4;
+  }
+
+  return jobs;
+}
+
+export function parseJobDataLakeDetailResult(result: unknown): unknown[] {
+  const text = extractMcpText(result);
+  if (!text) return [];
+  const lines = text.split(/\r?\n/);
+  const heading = /^\*\*(.+?)\*\*\s+at\s+(.+?)\s*$/.exec(lines[0]?.trim() ?? '');
+  if (!heading) return [];
+  const separatorIndex = lines.findIndex((line) => line.trim() === '---');
+  const metadata = lines.slice(0, separatorIndex >= 0 ? separatorIndex : lines.length);
+  const readField = (label: string) => {
+    const prefix = `${label.toLowerCase()}:`;
+    const line = metadata.find((item) => item.trim().toLowerCase().startsWith(prefix));
+    return line ? line.trim().slice(prefix.length).trim() : undefined;
+  };
+  const description = separatorIndex >= 0 ? lines.slice(separatorIndex + 1).join('\n').trim() : undefined;
+  const raw: Record<string, unknown> = {
+    title: heading[1].trim(),
+    company: heading[2].trim(),
+    location: readField('Location'),
+    salary: readField('Salary'),
+    seniority: readField('Seniority'),
+    experience_level: readField('Seniority'),
+    skills: readField('Skills'),
+    employment_type: readField('Type'),
+    job_type: readField('Type'),
+    applicationUrl: readField('Apply'),
+    url: readField('Apply'),
+    description,
+    workMode: readField('Location')?.toLowerCase().includes('remote') ? 'Remote' : undefined,
+  };
+  return [raw];
+}
+
+function extractMcpText(result: unknown): string | undefined {
+  if (!result || typeof result !== 'object') return undefined;
+  const root = result as Record<string, unknown>;
+  if (Array.isArray(root.content)) {
+    const texts = root.content
+      .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+      .map((item) => item.text)
+      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+    if (texts.length) return texts.join('\n');
+  }
+  if (typeof root.text === 'string') return root.text;
+  return undefined;
+}
+
+export function extractSearchId(value: unknown, depth = 0): string | undefined {
+  if (depth > 8 || value === null || value === undefined) return undefined;
+  if (typeof value === 'string') {
+    const text = value.trim();
+    if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']'))) {
+      try { return extractSearchId(JSON.parse(text) as unknown, depth + 1); } catch { return undefined; }
+    }
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = extractSearchId(item, depth + 1);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  if (typeof value !== 'object') return undefined;
+  const record = value as Record<string, unknown>;
+  const direct = record.search_id ?? record.searchId ?? record.searchID;
+  if (typeof direct === 'string' && direct.trim()) return direct.trim();
+  for (const key of ['structuredContent', 'content', 'text', 'result', 'data', 'output']) {
+    if (key in record) {
+      const found = extractSearchId(record[key], depth + 1);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+export function isJobDetailTool(name: string): boolean {
+  const normalized = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return normalized === 'get_job'
+    || /(?:^|_)get_job_details?$/.test(normalized)
+    || /(?:^|_)(?:fetch|retrieve)_job_details?$/.test(normalized)
+    || /(?:^|_)job_details?$/.test(normalized);
+}
+
+export function buildJobDetailArguments(schemaValue: unknown, job: NormalizedJob, profile: JobProfile): Record<string, unknown> | undefined {
+  if (!schemaValue || typeof schemaValue !== 'object') return undefined;
+  const schema = schemaValue as { properties?: Record<string, { type?: string }>; required?: string[] };
+  const properties = schema.properties ?? {};
+  if (Object.keys(properties).length === 0) return undefined;
+  const raw = job.raw ?? {};
+  const jobId = raw.id ?? raw.jobId ?? raw.job_id ?? raw.jobKey ?? raw.job_key ?? raw.job_handle ?? raw.jobHandle ?? raw.key ?? raw.slug ?? job.sourceJobId;
+  const searchId = raw.search_id ?? raw.searchId ?? raw.searchID;
+  const country = raw.country ?? raw.country_name ?? profile.countries?.[0] ?? inferCountry(profile);
+  const args: Record<string, unknown> = {};
+  const missing: string[] = [];
+
+  for (const [name, metadata] of Object.entries(properties)) {
+    const compact = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    let value: unknown;
+    if (compact === 'searchid' || compact === 'searchidentifier') value = searchId;
+    else if (compact === 'jobids' || compact === 'ids') value = jobId === undefined ? undefined : [String(jobId)];
+    else if (/^(id|jobid|jobkey|jobhandle|key|jobcode|slug|jobslug|jobidentifier)$/.test(compact)) value = jobId;
+    else if (/^(url|joburl|jobpostingurl|postingurl|link)$/.test(compact)) value = job.jobUrl ?? job.applicationUrl;
+    else if (/^(country|countryname|countrycode)$/.test(compact)) value = country;
+    else if (/^(company|companyname|employer)$/.test(compact)) value = job.company;
+    else if (/^(location|loc)$/.test(compact)) value = job.location ?? profile.location;
+    else if (/^(limit|count|n|resultswanted)$/.test(compact)) value = 1;
+    if (value !== undefined) {
+      args[name] = metadata.type === 'array' && !Array.isArray(value) ? [value] : value;
+    } else if ((schema.required ?? []).includes(name)) {
+      missing.push(name);
+    }
+  }
+
+  return missing.length > 0 ? undefined : args;
+}
+
+function inferCountry(profile: JobProfile): string | undefined {
+  const text = `${profile.location ?? ''} ${(profile.countries ?? []).join(' ')}`.toLowerCase();
+  if (/\b(india|bengaluru|bangalore|delhi|noida|gurugram|gurgaon|mumbai|hyderabad|chennai|pune|kolkata)\b/.test(text)) return 'India';
+  if (/\b(united states|usa|new york|san francisco|california|texas|seattle|boston)\b/.test(text)) return 'United States';
+  if (/\b(united kingdom|uk|london|manchester)\b/.test(text)) return 'United Kingdom';
+  return undefined;
+}
+
 function parseSearchReport(result: unknown, serverId: string): SearchSourceReport | undefined {
   if (!result || typeof result !== 'object') return undefined;
   const root = result as Record<string, unknown>;
@@ -208,11 +450,15 @@ function parseSearchReport(result: unknown, serverId: string): SearchSourceRepor
 
 function resolveSourceId(serverId: string, raw: unknown): string {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    if (serverId === 'linkedin-mcp-zero') return 'linkedin';
+    if (serverId === 'himalayas-mcp') return 'himalayas';
     return serverId;
   }
   const record = raw as Record<string, unknown>;
   if (serverId === 'apify-apna') return 'apna';
-  if (serverId === 'apify-boards') {
+  if (serverId === 'linkedin-mcp-zero') return 'linkedin';
+  if (serverId === 'himalayas-mcp') return 'himalayas';
+  if (serverId === 'apify-boards' || serverId === 'mcp-jobspy-speedyapply') {
     const source = String(record.source ?? record.site ?? '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
     const sources: Record<string, string> = {
       naukri: 'naukri',
@@ -221,8 +467,10 @@ function resolveSourceId(serverId: string, raw: unknown): string {
       glassdoor: 'glassdoor',
       ziprecruiter: 'ziprecruiter',
       bayt: 'bayt',
+      bdjobs: 'bdjobs',
+      hellowork: 'hellowork',
     };
-    return sources[source] ?? 'apify-boards';
+    return sources[source] ?? (serverId === 'mcp-jobspy-speedyapply' ? 'jobspy' : 'apify-boards');
   }
   return serverId;
 }
@@ -238,8 +486,8 @@ function inferArguments(schemaValue: unknown, profile: JobProfile, limit: number
   for (const [name, metadata] of Object.entries(properties)) {
     const compact = name.toLowerCase().replace(/[^a-z0-9]/g, '');
     let value: unknown;
-    if (/^(q|query|querytext|keyword|keywords|search|searchtext|searchterm|searchquery|term|jobtitle|title|position|role|job|jobname)$/.test(compact)) value = /s$/.test(compact) && metadata.type === 'array' ? [profile.jobTitle, ...(profile.keywords ?? [])] : [profile.jobTitle, ...(profile.keywords ?? [])].filter(Boolean).join(' ');
-    else if (/^(location|locationname|city|cityname|region|geo|geography|place|joblocation|preferredlocation)$/.test(compact)) value = profile.location ?? profile.countries?.join(', ');
+    if (/^(q|kw|query|querytext|keyword|keywords|search|searchtext|searchterm|searchquery|term|jobtitle|title|position|role|job|jobname)$/.test(compact)) value = /s$/.test(compact) && metadata.type === 'array' ? [profile.jobTitle, ...(profile.keywords ?? [])] : [profile.jobTitle, ...(profile.keywords ?? [])].filter(Boolean).join(' ');
+    else if (/^(loc|location|locationname|city|cityname|region|geo|geography|place|joblocation|preferredlocation)$/.test(compact)) value = profile.location ?? profile.countries?.join(', ');
     else if (/^(country|countries|countrycode)$/.test(compact)) value = metadata.type === 'array' ? profile.countries : profile.countries?.[0] ?? profile.location;
     else if (/^(skills|skill|technologies|techstack)$/.test(compact)) value = metadata.type === 'array' ? profile.skills : profile.skills?.join(', ');
     else if (/^(experience|experienceyears|minexperience|yearsofexperience|experiencelevel)$/.test(compact)) value = profile.experienceYears;

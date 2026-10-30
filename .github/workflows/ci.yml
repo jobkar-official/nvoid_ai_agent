@@ -41,6 +41,8 @@ jobs:
       - run: npm run lint:types
       - run: npm test -- --coverage
       - run: npm run build
+      - name: Build production image with live MCP runtimes
+        run: docker build --tag nvoid-agent:ci .
       - name: Smoke test the compiled API and local demo MCP source
         shell: bash
         run: |

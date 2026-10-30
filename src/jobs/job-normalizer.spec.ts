@@ -40,6 +40,27 @@ describe('job-normalizer', () => {
     expect(job?.matchScore).toBeLessThanOrEqual(100);
   });
 
+  it('normalizes abbreviated LinkedIn MCP Zero records without losing source fields', () => {
+    const job = normalizeJob({
+      id: '4481120122',
+      t: 'Senior Product Engineer',
+      co: 'Example Labs',
+      loc: 'Noida, India',
+      sal: '₹18L-24L per year',
+      posted: '2026-10-29',
+      url: 'https://www.linkedin.com/jobs/view/4481120122',
+      remote: true,
+    }, 'linkedin', profile);
+
+    expect(job?.title).toBe('Senior Product Engineer');
+    expect(job?.company).toBe('Example Labs');
+    expect(job?.location).toBe('Noida, India');
+    expect(job?.salary).toBe('₹18L-24L per year');
+    expect(job?.postedAt).toBe('2026-10-29');
+    expect(job?.workMode).toBe('Remote');
+    expect(job?.jobUrl).toBe('https://www.linkedin.com/jobs/view/4481120122');
+  });
+
   it('normalizes live Jobicy listing metadata without fabricating missing fields', () => {
     const job = normalizeJob({
       id: 90210,

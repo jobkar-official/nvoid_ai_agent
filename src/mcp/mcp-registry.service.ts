@@ -224,6 +224,7 @@ export class McpRegistryService implements OnApplicationBootstrap, OnModuleDestr
       'SERPER_SEARCH_MAX_REQUESTS', 'SERPER_SEARCH_MAX_PAGE_FETCHES', 'SERPER_SEARCH_CONCURRENCY',
       'SERPER_SEARCH_PAGE_CRAWL_CONCURRENCY',
       'NVOID_WEB_SEARCH_MAX_PAGES', 'NVOID_WEB_SEARCH_MAX_REQUESTS', 'NVOID_WEB_CRAWL_MAX_PAGES', 'NVOID_WEB_CRAWL_CONCURRENCY',
+      'JDL_API_KEY',
     ];
     const inheritedEnv = Object.fromEntries(
       inheritedEnvKeys
