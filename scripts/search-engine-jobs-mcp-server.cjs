@@ -90,22 +90,89 @@ function locationMatch(location, description, url, requested) {
   return true;
 }
 function quote(value){return'"'+String(value||'').replace(/["\r\n]/g,' ').trim().slice(0,140)+'"';}
+function roleVariants(value) {
+  const role=String(value||'').trim();
+  const variants=[role];
+  if(/\bdeveloper\b/i.test(role))variants.push(role.replace(/\bdeveloper\b/gi,'engineer'));
+  if(/\bengineer\b/i.test(role))variants.push(role.replace(/\bengineer\b/gi,'developer'));
+  if(/\bsoftware developer\b/i.test(role))variants.push(role.replace(/\bsoftware developer\b/i,'software engineer'));
+  if(/\bsoftware engineer\b/i.test(role))variants.push(role.replace(/\bsoftware engineer\b/i,'software developer'));
+  return [...new Set(variants.map(x=>x.trim()).filter(Boolean))].slice(0,3);
+}
+function locationVariants(value) {
+  const location=String(value||'').trim();
+  const variants=[location];
+  const normalized=norm(location);
+  const aliases=[
+    [/\bbengaluru\b|\bbangalore\b/,'Bangalore'],
+    [/\bdelhi ncr\b|\bnew delhi\b|\bdelhi\b/,'Noida'],
+    [/\bdelhi ncr\b|\bnew delhi\b|\bdelhi\b/,'Gurugram'],
+    [/\bmumbai\b/,'Navi Mumbai'],
+    [/\bmumbai\b/,'Thane'],
+    [/\bgurugram\b|\bgurgaon\b/,'Gurugram'],
+    [/\bhyderabad\b/,'Hyderabad'],
+    [/\bpune\b/,'Pune'],
+    [/\bchennai\b/,'Chennai']
+  ];
+  for(const [pattern,alias] of aliases)if(pattern.test(normalized)&&!normalized.includes(norm(alias)))variants.push(alias);
+  return [...new Set(variants.filter(Boolean))].slice(0,3);
+}
+function governmentDomains(location) {
+  const c=country(location);
+  const domains={
+    india:['gov.in','nic.in'],
+    'united states':['usa.gov','careers.state.gov'],
+    canada:['canada.ca','gc.ca'],
+    'united kingdom':['gov.uk'],
+    australia:['gov.au'],
+    germany:['bund.de'],
+    singapore:['gov.sg'],
+    pakistan:['gov.pk']
+  };
+  return domains[c]||[];
+}
 function buildSearchQueries(profile) {
   const role=String(profile.query||profile.jobTitle||'').trim().slice(0,140);
   const loc=String(profile.location||(profile.countries||[]).join(' ')||'').trim().slice(0,100);
-  const place=/^(worldwide|global|anywhere|remote|all countries)$/i.test(loc)?'remote':quote(loc);
-  const rq=quote(role),suffix=place?' '+place:'';
-  const skills=[...(profile.skills||[]),...(profile.keywords||[])].map(String).map(s=>s.trim()).filter(Boolean).slice(0,3);
-  const q=[rq+suffix+' jobs careers apply','intitle:'+rq+suffix+' jobs hiring',
-    'site:boards.greenhouse.io '+rq+suffix,'site:job-boards.greenhouse.io '+rq+suffix,
-    'site:jobs.lever.co '+rq+suffix,'site:jobs.ashbyhq.com '+rq+suffix,
-    'site:myworkdayjobs.com '+rq+suffix,'site:jobs.smartrecruiters.com '+rq+suffix,
-    'site:linkedin.com/jobs/view '+rq+suffix,'site:naukri.com/job-listings '+rq+suffix,
-    'site:indeed.com/viewjob '+rq+suffix,'site:foundit.in/job '+rq+suffix,
-    'site:apna.co/job '+rq+suffix,'site:wellfound.com/jobs '+rq+suffix,
-    'site:jobs.workable.com '+rq+suffix,'site:jobs.jobvite.com '+rq+suffix,'site:jobs.icims.com '+rq+suffix];
-  if(skills.length)q.push(rq+' '+skills.map(quote).join(' ')+suffix+' career openings');
-  return [...new Set(q.map(x=>x.replace(/\s+/g,' ').trim()))].slice(0,envInt('SERPER_SEARCH_MAX_QUERIES',18,1,18));
+  const places=locationVariants(loc);
+  const place=places[0]&& !/^(worldwide|global|anywhere|remote|all countries)$/i.test(places[0])?quote(places[0]):'remote';
+  const roleForms=roleVariants(role);
+  const skills=[...(profile.skills||[]),...(profile.keywords||[])].map(String).map(s=>s.trim()).filter(Boolean).slice(0,5);
+  const queries=[];
+  const add=(value)=>{const q=String(value||'').replace(/\s+/g,' ').trim();if(q&&!queries.includes(q))queries.push(q);};
+  for(const variant of roleForms){
+    const exact=quote(variant);
+    add(exact+' '+place+' jobs');
+    add(variant+' '+place+' jobs OR careers OR openings OR vacancies');
+  }
+  add(role+' '+place+' hiring recruitment employment opportunities');
+  add(role+' '+place+' company career pages');
+  add('inurl:careers '+role+' '+place);
+  add('inurl:jobs '+role+' '+place);
+  add('intitle:recruitment '+role+' '+place+' vacancy OR notification');
+  if(skills.length){
+    add(role+' '+skills.slice(0,3).join(' ')+' '+place+' jobs');
+    add(quote(role)+' '+skills.slice(0,2).map(quote).join(' ')+' '+place+' careers');
+  }
+  const boardDomains=[
+    'linkedin.com/jobs','naukri.com','indeed.com','foundit.in','apna.co','glassdoor.com',
+    'wellfound.com/jobs','cutshort.io','instahyre.com','hirist.com','iimjobs.com','shine.com'
+  ];
+  for(const domain of boardDomains)add('site:'+domain+' '+role+' '+place+' jobs');
+  const atsDomains=[
+    'boards.greenhouse.io','job-boards.greenhouse.io','jobs.lever.co','jobs.ashbyhq.com',
+    'myworkdayjobs.com','jobs.smartrecruiters.com','jobs.workable.com','jobs.jobvite.com',
+    'jobs.icims.com','successfactors.eu','oraclecloud.com','teamtailor.com','breezy.hr','recruitee.com'
+  ];
+  for(const domain of atsDomains)add('site:'+domain+' '+role+' '+place);
+  for(const domain of governmentDomains(loc)){
+    add('site:'+domain+' '+role+' '+place+' recruitment OR vacancy OR notification');
+    add('site:'+domain+' '+role+' recruitment appointment contract');
+  }
+  add(role+' '+place+' government recruitment vacancy public sector');
+  add(role+' '+place+' tender procurement RFP EOI contract opportunity');
+  add('('+quote(role)+' OR '+role+') '+place+' internship apprenticeship fellowship recruitment');
+  return queries.slice(0,envInt('SERPER_SEARCH_MAX_QUERIES',36,1,64));
 }
 function safeUrl(raw) {
   try {
@@ -115,13 +182,17 @@ function safeUrl(raw) {
     u.hash='';return u;
   } catch{return undefined;}
 }
-function isJobUrl(raw) {
+function isJobUrl(raw,evidence='') {
   const u=safeUrl(raw);if(!u)return false;
   const h=u.hostname.toLowerCase(),p=(u.pathname+u.search).toLowerCase();
-  const path=/\/(?:jobs?\/|job-listings?(?:\/|-)|careers?(?:\/|-|$)|positions?\/|openings?\/|vacancies\/|viewjob(?:[/?]|$)|apply\/)/i.test(p);
-  const ats=/greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|smartrecruiters\.com|workable\.com|icims\.com|jobvite\.com|successfactors\.com|oraclecloud\.com|teamtailor\.com/i.test(h)&&u.pathname.split('/').filter(Boolean).length>=2;
-  const domains=['linkedin.com','naukri.com','indeed.com','foundit.in','apna.co','wellfound.com','glassdoor.com','builtin.com','ziprecruiter.com','greenhouse.io','lever.co','ashbyhq.com','workdayjobs.com'];
-  return path||ats||(domains.some(d=>h===d||h.endsWith('.'+d))&&u.pathname.split('/').filter(Boolean).length>=2&&!/\/(search|companies|company|blog|about|privacy|terms)(\/|$)/i.test(p));
+  const blocked=/^\/(?:blog|blogs|news|article|articles|search|about|privacy|terms|events)(?:\/|$)/i.test(u.pathname);
+  if(blocked)return false;
+  const pathSignal=/(?:^|[\/_-])(?:jobs?|job-listings?|job-openings?|careers?|career-opportunities|positions?|openings?|vacancies|recruitment|recruiting|employment|join-us|work-with-us|internships?|apprenticeships?|fellowships?|notifications?|advertisements?|recruitment-notice|tenders?|procurement|rfp|rfi|eoi|bids?|solicitations?)(?:[\/?._-]|$)/i.test(p);
+  const ats=/greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|smartrecruiters\.com|workable\.com|icims\.com|jobvite\.com|successfactors\.|oraclecloud\.com|teamtailor\.com|breezy\.hr|recruitee\.com|pinpoint\.com/i.test(h)&&u.pathname.split('/').filter(Boolean).length>=1;
+  const domains=['linkedin.com','naukri.com','indeed.com','foundit.in','apna.co','wellfound.com','glassdoor.com','builtin.com','ziprecruiter.com','cutshort.io','instahyre.com','hirist.com','iimjobs.com','shine.com'];
+  const knownBoard=domains.some(d=>h===d||h.endsWith('.'+d))&&u.pathname.split('/').filter(Boolean).length>=1;
+  const evidenceSignal=/(job|career|vacanc|recruit|hiring|tender|procurement|\brfp\b|\beoi\b|expression of interest|notification|internship|fellowship|employment opportunity|position available)/i.test(String(evidence||''));
+  return pathSignal||ats||knownBoard||(evidenceSignal&&u.pathname.split('/').filter(Boolean).length>=1);
 }
 function walkPosting(value,out,depth) {
   if(!value||typeof value!=='object'||depth>10)return;
@@ -162,8 +233,9 @@ function mapResult(candidate,page) {
   return{id:u.href,title,company:candidate.company||companyFrom(u),location:loc||(remote?'Remote · eligibility not stated':''),country:country(e)||'',description,tags:'',employmentType:'',workMode:remote?'Remote':'',postedAt:candidate.age||'',url:u.href,source:SOURCE,raw:{sourceDomain:candidate.domain,indexedTitle:candidate.title,indexedSnippet:candidate.description,searchQuery:candidate.query,schemaJobPosting:false}};
 }
 function candidateFromResult(r,role,location,q) {
-  if(!r?.url)return undefined;const u=safeUrl(r.url);if(!u||!isJobUrl(u.href))return undefined;
+  if(!r?.url)return undefined;const u=safeUrl(r.url);
   const title=clean(r.title||''),desc=clean(r.description||r.snippet||''),extra=(r.extra_snippets||[]).map(clean);
+  if(!u||!isJobUrl(u.href,[title,desc,...extra].join(' ')))return undefined;
   if(!matchesRole(title,[desc,...extra].join(' '),role))return undefined;
   return{url:u.href,title,description:desc,extra,domain:clean(r.profile?.long_name||r.profile?.name||u.hostname),company:clean(r.profile?.name||''),age:clean(r.page_age||''),query:q,location};
 }
