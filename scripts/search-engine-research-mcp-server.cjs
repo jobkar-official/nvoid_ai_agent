@@ -199,9 +199,9 @@ function normalizeOrganic(items, query) {
 }
 
 function buildDorkQueries(query) {
-  const phrase = String(query || '').replace(/["']/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 180);
-  if (!phrase || /\\b(site|inurl|intitle|filetype|before|after):/i.test(phrase)) return [];
-  const words = phrase.split(/\\s+/).filter((word) => word.length > 2 && !/^(the|and|for|with|from|into|near|around|about)$/i.test(word));
+  const phrase = String(query || '').replace(/["']/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 180);
+  if (!phrase || /\b(site|inurl|intitle|filetype|before|after):/i.test(phrase)) return [];
+  const words = phrase.split(/\s+/).filter((word) => word.length > 2 && !/^(the|and|for|with|from|into|near|around|about)$/i.test(word));
   if (words.length === 0) return [];
   const lead = words.slice(0, 3).join(' ');
   const variants = [
@@ -210,7 +210,7 @@ function buildDorkQueries(query) {
     'inurl:' + words[0].toLowerCase() + ' "' + phrase + '"',
     'filetype:pdf "' + phrase + '"',
   ];
-  if (/\\b(job|jobs|hiring|career|vacanc(?:y|ies)|recruitment|opening|employment)\\b/i.test(phrase)) {
+  if (/\b(job|jobs|hiring|career|vacanc(?:y|ies)|recruitment|opening|employment)\b/i.test(phrase)) {
     variants.push('site:linkedin.com/jobs "' + phrase + '"');
     variants.push('site:naukri.com "' + phrase + '"');
   }
