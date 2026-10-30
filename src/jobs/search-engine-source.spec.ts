@@ -4,7 +4,7 @@ const crawler = require('../../scripts/search-engine-jobs-mcp-server.cjs') as {
   matchesRole: (title: string, description: string, query: string) => boolean;
   locationMatch: (location: string, description: string, url: string, requested: string) => boolean;
   safeUrl: (url: string) => URL | undefined;
-  isJobUrl: (url: string) => boolean;
+  isJobUrl: (url: string, evidence?: string) => boolean;
   parsePage: (html: string, url: string) => { title: string; description: string; canonicalUrl: string; postings: Array<Record<string, unknown>> };
   normalizeSearchResponse: (data: Record<string, unknown>) => { results: Array<Record<string, unknown>>; more: boolean };
 };
@@ -13,8 +13,12 @@ describe('search-engine job crawler', () => {
     const queries = crawler.buildSearchQueries({ query: 'Java Developer', location: 'Bengaluru, India', skills: ['Java', 'Spring Boot'] });
     expect(queries.some((q) => q.includes('site:naukri.com/job-listings'))).toBe(true);
     expect(queries.some((q) => q.includes('site:boards.greenhouse.io'))).toBe(true);
-    expect(queries.every((q) => q.includes('Java Developer'))).toBe(true);
+    expect(queries.every((q) => q.includes('Java'))).toBe(true);
     expect(queries.some((q) => q.includes('Bengaluru, India'))).toBe(true);
+    expect(queries.some((q) => q.includes('site:cutshort.io'))).toBe(true);
+    expect(queries.some((q) => q.includes('site:boards.greenhouse.io'))).toBe(true);
+    expect(queries.some((q) => q.includes('site:gov.in'))).toBe(true);
+    expect(queries.some((q) => q.includes('tender procurement RFP'))).toBe(true);
   });
   it('separates role families and specific technologies', () => {
     expect(crawler.family('Software Developer')).toBe('software');
@@ -31,6 +35,9 @@ describe('search-engine job crawler', () => {
   });
   it('recognizes public job URLs and rejects unsafe URLs', () => {
     expect(crawler.isJobUrl('https://jobs.lever.co/acme/123')).toBe(true);
+    expect(crawler.isJobUrl('https://recruitment.example.gov.in/notices/2026/45', 'Java Developer recruitment notification')).toBe(true);
+    expect(crawler.isJobUrl('https://university.example.edu/careers/opening-123')).toBe(true);
+    expect(crawler.isJobUrl('https://procurement.example.gov.in/notices/it-services-12', 'Tender for Java application development services')).toBe(true);
     expect(crawler.isJobUrl('https://www.naukri.com/job-listings-java-developer-123')).toBe(true);
     expect(crawler.isJobUrl('https://www.indeed.com/viewjob?jk=abc123')).toBe(true);
     expect(crawler.isJobUrl('https://example.com/about')).toBe(false);
