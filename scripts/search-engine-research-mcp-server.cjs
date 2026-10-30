@@ -270,9 +270,6 @@ async function handle(message) {
     try {
       const value = await searchWeb(message.params?.arguments || {});
       const structuredContent = { ...value, returnedCount: value.records.length };
-      send(id, {
-        result: undefined,
-      });
       const envelope = {
         jsonrpc: '2.0',
         id,
