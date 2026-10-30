@@ -44,6 +44,7 @@ describe('job relevance filters', () => {
 
   it('matches a specified city through exact location, country or an eligible region', () => {
     expect(matchesJobLocation(job({ location: 'Bengaluru, India' }), profile)).toBe(true);
+    expect(matchesJobLocation(job({ location: 'India', raw: { indexedSnippet: 'The engineering position is based in Bangalore.' } }), profile)).toBe(true);
     expect(matchesJobLocation(job({ location: 'India', workMode: 'Remote' }), profile)).toBe(true);
     expect(matchesJobLocation(job({ location: 'India', workMode: 'On-site' }), profile)).toBe(false);
     expect(matchesJobLocation(job({ location: 'APAC remote', workMode: 'Remote' }), profile)).toBe(true);
