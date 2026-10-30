@@ -263,33 +263,34 @@ export class ResearchService {
     }
 
     const records = [...unique.values()];
-    const perConnector = statuses
-      .filter((status) => selectedServers.size === 0 || selectedServers.has(status.id))
-      .map((status) => {
-        const server = connectedCatalog.find((entry) => entry.serverId === status.id);
-        const sourceCalls = calls.filter((call) => call.serverId === status.id);
-        return {
-          serverId: status.id,
-          serverName: status.name,
-          enabled: status.enabled,
-          connected: status.connected,
-          connectionError: status.error,
-          discoveredTools: server?.tools.length ?? 0,
-          readOnlyTools: server?.tools.filter(isReadOnlyResearchTool).length ?? 0,
-          callsSucceeded: sourceCalls.filter((call) => call.status === 'success').length,
-          callsFailed: sourceCalls.filter((call) => call.status === 'failed').length,
-          recordsReturned: sourceCalls.reduce((total, call) => total + call.recordsReturned, 0),
-        };
-      });
+    const perConnector = statuses.map((status) => {
+      const server = connectedCatalog.find((entry) => entry.serverId === status.id);
+      const sourceCalls = calls.filter((call) => call.serverId === status.id);
+      return {
+        serverId: status.id,
+        serverName: status.name,
+        enabled: status.enabled,
+        connected: status.connected,
+        selected: selectedServers.size === 0 || selectedServers.has(status.id),
+        connectionError: status.error,
+        discoveredTools: server?.tools.length ?? 0,
+        readOnlyTools: server?.tools.filter(isReadOnlyResearchTool).length ?? 0,
+        callsSucceeded: sourceCalls.filter((call) => call.status === 'success').length,
+        callsFailed: sourceCalls.filter((call) => call.status === 'failed').length,
+        recordsReturned: sourceCalls.reduce((total, call) => total + call.recordsReturned, 0),
+      };
+    });
 
     return {
       query,
       generatedAt: new Date().toISOString(),
       planner,
       report: {
-        configuredServers: perConnector.length,
-        connectedServers: perConnector.filter((connector) => connector.connected).length,
-        toolsDiscovered: perConnector.reduce((total, connector) => total + connector.discoveredTools, 0),
+        configuredServers: statuses.length,
+        connectedServers: statuses.filter((status) => status.connected).length,
+        selectedServers: perConnector.filter((connector) => connector.selected).length,
+        selectedConnectedServers: perConnector.filter((connector) => connector.selected && connector.connected).length,
+        toolsDiscovered: connectedCatalog.reduce((total, server) => total + server.tools.length, 0),
         readOnlyToolsDiscovered: safeTools.length,
         plannedCalls: plans.length,
         successfulCalls: calls.filter((call) => call.status === 'success').length,
@@ -316,6 +317,37 @@ export function isReadOnlyResearchTool(tool: ResearchTool): boolean {
   return READ_TOOL_PATTERN.test(normalizedName);
 }
 
+function inferCountryCode(query: string): string | undefined {
+  const countries: Array<[RegExp, string]> = [
+    [/\b(?:india|indian)\b/i, 'IN'],
+    [/\b(?:united states|united states of america|usa|u\.?s\.?a?\.?|america)\b/i, 'US'],
+    [/\b(?:united kingdom|great britain|britain|england|scotland|wales|uk|u\.?k\.?)\b/i, 'GB'],
+    [/\bcanada\b/i, 'CA'],
+    [/\baustralia\b/i, 'AU'],
+    [/\bsingapore\b/i, 'SG'],
+    [/\bgermany\b/i, 'DE'],
+    [/\bfrance\b/i, 'FR'],
+    [/\bjapan\b/i, 'JP'],
+    [/\b(?:uae|united arab emirates)\b/i, 'AE'],
+    [/\bpakistan\b/i, 'PK'],
+    [/\bbangladesh\b/i, 'BD'],
+    [/\bireland\b/i, 'IE'],
+    [/\bnetherlands\b/i, 'NL'],
+    [/\bnew zealand\b/i, 'NZ'],
+    [/\bsouth africa\b/i, 'ZA'],
+    [/\bbrazil\b/i, 'BR'],
+    [/\bmexico\b/i, 'MX'],
+    [/\bspain\b/i, 'ES'],
+    [/\bitaly\b/i, 'IT'],
+    [/\bswitzerland\b/i, 'CH'],
+    [/\bsweden\b/i, 'SE'],
+    [/\bnorway\b/i, 'NO'],
+    [/\bdenmark\b/i, 'DK'],
+    [/\bpoland\b/i, 'PL'],
+  ];
+  return countries.find(([pattern]) => pattern.test(query))?.[1];
+}
+
 export function inferResearchArguments(
   query: string,
   schemaValue: unknown,
@@ -327,6 +359,7 @@ export function inferResearchArguments(
   const required = schema.required ?? [];
   const result: Record<string, unknown> = {};
   const location = query.match(/\b(?:in|near|around|within|based in|located in)\s+([^,;.!?]+)/i)?.[1]?.trim();
+  const countryCode = inferCountryCode(query);
 
   for (const [name, property] of Object.entries(properties)) {
     const compact = name.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -337,6 +370,8 @@ export function inferResearchArguments(
       value = maxRecords;
     } else if (/^(location|city|region|geo|geography|place)$/.test(compact) && location) {
       value = property.type === 'array' ? [location] : location;
+    } else if (/^(country|countrycode|gl)$/.test(compact) && countryCode) {
+      value = property.type === 'array' ? [countryCode] : countryCode;
     }
     if (value !== undefined) {
       if (property.enum && !property.enum.includes(value)) continue;
