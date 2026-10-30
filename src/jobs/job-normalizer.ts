@@ -7,8 +7,8 @@ const URL_KEYS = ['applicationUrl', 'application_url', 'applyUrl', 'apply_url', 
 const ID_KEYS = ['id', 'jobId', 'job_id', 'externalId', 'external_id', 'job_uuid'];
 const LOCATION_KEYS = ['location', 'jobLocation', 'job_location', 'jobGeo', 'job_geo', 'locationRestrictions', 'location_restrictions', 'allowedCountries', 'allowed_countries', 'eligibleLocations', 'eligible_locations', 'city', 'locations', 'address', 'region', 'loc'];
 const DESCRIPTION_KEYS = ['description', 'jobDescription', 'job_description', 'summary', 'details', 'snippet'];
-const SALARY_MIN_KEYS = ['salaryMin', 'salary_min', 'minSalary', 'min_salary', 'salary_from', 'minimumSalary'];
-const SALARY_MAX_KEYS = ['salaryMax', 'salary_max', 'maxSalary', 'max_salary', 'salary_to', 'maximumSalary'];
+const SALARY_MIN_KEYS = ['salaryMin', 'salary_min', 'minSalary', 'min_salary', 'salary_from', 'minimumSalary', 'min_amount'];
+const SALARY_MAX_KEYS = ['salaryMax', 'salary_max', 'maxSalary', 'max_salary', 'salary_to', 'maximumSalary', 'max_amount'];
 const POSTED_KEYS = ['postedAt', 'posted_at', 'posted', 'postedDate', 'posted_date', 'datePosted', 'date_posted', 'createdAt', 'created_at', 'publishedAt', 'pubDate', 'pub_date', 'date', 'epoch', 'age'];
 
 export function parseMcpJobResult(result: unknown): unknown[] {
@@ -87,12 +87,12 @@ export function normalizeJob(rawValue: unknown, source: string, profile: JobProf
     jobUrl,
     applicationUrl,
     employmentType: getString(raw, ['employmentType', 'employment_type', 'jobType', 'job_type', 'type']),
-    workMode: getString(raw, ['workMode', 'work_mode', 'workplaceType', 'workplace_type', 'remoteType']) ?? (['jobicy', 'remoteok'].includes(source) ? 'Remote' : undefined),
+    workMode: getString(raw, ['workMode', 'work_mode', 'workplaceType', 'workplace_type', 'remoteType']) ?? ((raw.remote === true || raw.is_remote === true) ? 'Remote' : ['jobicy', 'remoteok'].includes(source) ? 'Remote' : undefined),
     salaryMin: getNumber(raw, SALARY_MIN_KEYS),
     salaryMax: getNumber(raw, SALARY_MAX_KEYS),
     salaryCurrency: getString(raw, ['salaryCurrency', 'salary_currency', 'currency']),
     postedAt: getString(raw, POSTED_KEYS),
-    experience: getString(raw, ['experience', 'experienceLevel', 'experience_level', 'jobLevel', 'job_level', 'yearsExperience', 'years_of_experience', 'experienceRange', 'experience_range', 'seniorityLevel']),
+    experience: getString(raw, ['experience', 'experienceLevel', 'experience_level', 'jobLevel', 'job_level', 'yearsExperience', 'years_of_experience', 'experienceRange', 'experience_range', 'seniorityLevel', 'seniority_level']),
     matchScore: score,
     matchReasons: reasons,
     raw,
