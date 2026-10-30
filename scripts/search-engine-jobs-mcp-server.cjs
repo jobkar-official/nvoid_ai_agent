@@ -299,7 +299,7 @@ async function discover(args,limit) {
   const role=String(args.query||'').trim(),location=String(args.location||(args.countries||[]).join(', ')||'').trim();
   if(!role||!location)throw new Error('Both target job title and preferred location are required.');
   if(!process.env.SERPER_API_KEY||String(process.env.SERPER_API_KEY).includes('$'+'{'))throw new Error('Serper search is disabled. Set SERPER_API_KEY and restart the worker.');
-  const target=Math.min(envInt('SERPER_SEARCH_MAX_RESULTS',1000,50,1000),limit),queries=buildSearchQueries({query:role,location,skills:args.skills,keywords:args.keywords}),pageCap=envInt('SERPER_SEARCH_MAX_PAGES_PER_QUERY',10,1,10),requestCap=envInt('SERPER_SEARCH_MAX_REQUESTS',80,1,120);
+  const target=Math.min(envInt('SERPER_SEARCH_MAX_RESULTS',1000,50,1000),limit),queries=buildSearchQueries({query:role,location,skills:args.skills,keywords:args.keywords}),pageCap=envInt('SERPER_SEARCH_MAX_PAGES_PER_QUERY',4,1,10),requestCap=envInt('SERPER_SEARCH_MAX_REQUESTS',72,1,120);
   const candidateMap=new Map();let calls=0,indexed=0,failures=0,more=false;
   for(let offset=0;offset<pageCap&&calls<requestCap;offset++){
     const tasks=queries.slice(0,Math.min(queries.length,requestCap-calls)).map(q=>({q,offset}));
