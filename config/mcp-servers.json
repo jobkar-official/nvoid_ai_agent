@@ -793,5 +793,27 @@
         "limit": 50
       }
     }
+  },
+  {
+    "id": "jobdatalake",
+    "name": "JobDataLake — 1M+ enriched jobs across 40+ ATS platforms",
+    "enabled": true,
+    "transport": "stdio",
+    "command": "mcp-server",
+    "args": [],
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "query": {
+          "$profile": "jobTitle"
+        },
+        "location": {
+          "$profile": "location"
+        },
+        "posted_within": "30d",
+        "sort_by": "posted_at:desc",
+        "per_page": 50
+      }
+    }
   }
 ]
