@@ -222,8 +222,10 @@ function locationFields(job: NormalizedJob): string[] {
     job.location, job.country, raw.city, raw.country, raw.country_name, raw.location_country, raw.region,
     raw.locationRestrictions, raw.location_restrictions, raw.allowedCountries, raw.allowed_countries,
     raw.locations, raw.geography, raw.geographies,
+    raw.indexedTitle, raw.indexedSnippet, raw.searchQuery,
     nested?.city, nested?.country, nested?.country_name, nested?.location_country, nested?.region,
     nested?.locationRestrictions, nested?.location_restrictions, nested?.allowedCountries,
+    nested?.indexedTitle, nested?.indexedSnippet, nested?.searchQuery,
   ];
   return values.map((value) => {
     if (Array.isArray(value)) return value.map((item) => typeof item === 'string' ? item : JSON.stringify(item)).join(', ');
