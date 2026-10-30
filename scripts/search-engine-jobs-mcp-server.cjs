@@ -300,13 +300,19 @@ async function discover(args,limit) {
   if(!role||!location)throw new Error('Both target job title and preferred location are required.');
   if(!process.env.SERPER_API_KEY||String(process.env.SERPER_API_KEY).includes('$'+'{'))throw new Error('Serper search is disabled. Set SERPER_API_KEY and restart the worker.');
   const target=Math.min(envInt('SERPER_SEARCH_MAX_RESULTS',1000,50,1000),limit),queries=buildSearchQueries({query:role,location,skills:args.skills,keywords:args.keywords}),pageCap=envInt('SERPER_SEARCH_MAX_PAGES_PER_QUERY',4,1,10),requestCap=envInt('SERPER_SEARCH_MAX_REQUESTS',72,1,120);
-  const candidateMap=new Map();let calls=0,indexed=0,failures=0,more=false;
+  const candidateMap=new Map();let calls=0,indexed=0,failures=0,more=false,rejectedUrl=0,rejectedRole=0,rejectedLocation=0;
   for(let offset=0;offset<pageCap&&calls<requestCap;offset++){
     const tasks=queries.slice(0,Math.min(queries.length,requestCap-calls)).map(q=>({q,offset}));
     const batch=await concurrent(tasks,envInt('SERPER_SEARCH_CONCURRENCY',10,1,10),async task=>({task,page:await searchPage(task.q,task.offset,searchCountry(location))}));
     calls+=tasks.length;
     for(const item of batch){if(!item?.page){failures++;continue;}indexed+=item.page.results.length;more=more||item.page.more;
-      for(const r of item.page.results){const c=candidateFromResult(r,role,location,item.task.q);if(c&&!candidateMap.has(c.url))candidateMap.set(c.url,c);}
+      for(const r of item.page.results){
+        const evidence=[r?.title,r?.description,r?.snippet,...(r?.extra_snippets||[])].map(clean).join(' ');
+        const url=safeUrl(r?.url);
+        if(!url||!isJobUrl(url.href,evidence)){rejectedUrl++;continue;}
+        if(!matchesRole(r?.title||'',evidence,role)){rejectedRole++;continue;}
+        const c=candidateFromResult(r,role,location,item.task.q);if(c&&!candidateMap.has(c.url))candidateMap.set(c.url,c);
+      }
     }
     if(candidateMap.size>=target*1.2)break;
   }
@@ -315,14 +321,14 @@ async function discover(args,limit) {
   const unique=new Map();let structured=0,metadata=0;
   for(const item of crawled){if(!item)continue;
     if(item.page?.postings?.length){let accepted=false;
-      for(const posting of item.page.postings){const job=mapPosting(posting,item.candidate,item.page);if(!job.url||!isJobUrl(job.url,job.title+' '+job.description)||!matchesRole(job.title,job.description,role)||!locationMatch(job.location,job.description,job.url,location))continue;if(!unique.has(job.url))unique.set(job.url,job);accepted=true;}
+      for(const posting of item.page.postings){const job=mapPosting(posting,item.candidate,item.page);if(!job.url||!isJobUrl(job.url,job.title+' '+job.description)||!matchesRole(job.title,job.description,role)){rejectedRole++;continue;}if(!locationMatch(job.location,job.description,job.url,location)){rejectedLocation++;continue;}if(!unique.has(job.url))unique.set(job.url,job);accepted=true;}
       if(accepted){structured++;continue;}
     }
-    const job=mapResult(item.candidate,item.page);if(job&&matchesRole(job.title,job.description,role)&&locationMatch(job.location,job.description,job.url,location)){if(!unique.has(job.url))unique.set(job.url,job);metadata++;}
+    const job=mapResult(item.candidate,item.page);if(job&&matchesRole(job.title,job.description,role)){if(!locationMatch(job.location,job.description,job.url,location)){rejectedLocation++;continue;}if(!unique.has(job.url))unique.set(job.url,job);metadata++;}
   }
-  for(const c of candidates.slice(maxFetch)){const job=mapResult(c,undefined);if(job&&matchesRole(job.title,job.description,role)&&locationMatch(job.location,job.description,job.url,location)){if(!unique.has(job.url))unique.set(job.url,job);metadata++;}}
-  const records=[...unique.values()],jobs=records.slice(0,target);
-  return{jobs,report:{provider:'Serper Google Search API',mode:'dork-style search-engine discovery and public job-page extraction',queryCount:queries.length,requestsMade:calls,rawIndexedResults:indexed,uniqueRoleLocationUrls:candidates.length,publicJobPagesFetched:crawled.filter(x=>x?.page).length,structuredJobPages:structured,metadataOnlyListings:metadata,matchedJobs:records.length,returnedJobs:jobs.length,targetCount:target,reachedRequestedLimit:jobs.length>=target,moreSearchResultsAvailable:more,failedSearchRequests:failures,truncated:records.length>jobs.length||candidates.length>=target*1.2}};
+  for(const c of candidates.slice(maxFetch)){const job=mapResult(c,undefined);if(job&&matchesRole(job.title,job.description,role)){if(!locationMatch(job.location,job.description,job.url,location)){rejectedLocation++;continue;}if(!unique.has(job.url))unique.set(job.url,job);metadata++;}}
+  const records=[...unique.values()],jobs=records.slice(0,target),kinds=records.reduce((counts,job)=>{const kind=job.raw?.opportunityType||'employment';counts[kind]=(counts[kind]||0)+1;return counts;},{});
+  return{jobs,report:{provider:'Serper Google Search API',mode:'Google dork discovery, public career-page extraction and recruitment/tender notice discovery',queryCount:queries.length,requestsMade:calls,rawIndexedResults:indexed,uniqueRoleLocationUrls:candidates.length,publicJobPagesFetched:crawled.filter(x=>x?.page).length,structuredJobPages:structured,metadataOnlyListings:metadata,matchedJobs:records.length,returnedJobs:jobs.length,targetCount:target,reachedRequestedLimit:jobs.length>=target,moreSearchResultsAvailable:more,failedSearchRequests:failures,rejectedUrlResults:rejectedUrl,rejectedRoleResults:rejectedRole,rejectedLocationResults:rejectedLocation,opportunityTypes:kinds,truncated:records.length>jobs.length||candidates.length>=target*1.2}};
 }
 async function search(args) {
   const role=String(args.query||'').trim(),loc=String(args.location||(args.countries||[]).join(', ')||'').trim(),limit=Number.isFinite(Number(args.limit))?Math.min(1000,Math.max(1,Math.floor(Number(args.limit)))):500;
