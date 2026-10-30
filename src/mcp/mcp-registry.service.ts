@@ -75,9 +75,13 @@ export class McpRegistryService implements OnApplicationBootstrap, OnModuleDestr
     const matches: Array<{ server: McpServerConfig; tool: string; argumentsTemplate: Record<string, unknown>; inputSchema?: unknown; configured: boolean }> = [];
     for (const entry of this.servers.values()) {
       if (!entry.connected) continue;
-      if (entry.config.jobSearch?.tool) {
-        const tool = entry.tools.find((item) => item.name === entry.config.jobSearch!.tool);
-        if (tool) matches.push({ server: entry.config, tool: tool.name, argumentsTemplate: entry.config.jobSearch.arguments, inputSchema: tool.inputSchema, configured: true });
+      const configuredToolName = entry.config.jobSearch?.tool;
+      const isPlaceholderTool = !configuredToolName || /^(replace_|todo|auto_discover)/i.test(configuredToolName);
+      const configuredTool = !isPlaceholderTool
+        ? entry.tools.find((item) => item.name === configuredToolName)
+        : undefined;
+      if (configuredTool) {
+        matches.push({ server: entry.config, tool: configuredTool.name, argumentsTemplate: entry.config.jobSearch?.arguments ?? {}, inputSchema: configuredTool.inputSchema, configured: true });
         continue;
       }
       const candidate = entry.tools.find((tool) => {
