@@ -212,7 +212,7 @@ async function searchWeb(args) {
   ])].slice(0, 8);
   const pageLimit = integerEnv('NVOID_WEB_SEARCH_MAX_PAGES', 10, 1, 30);
   const pagesPerQuery = Math.min(pageLimit, Math.ceil(limit / 10));
-  const maxRequests = integerEnv('NVOID_WEB_SEARCH_MAX_REQUESTS', 72, 1, 240);
+  const maxRequests = integerEnv('NVOID_WEB_SEARCH_MAX_REQUESTS', 30, 1, 240);
   const requestedPages = queries.flatMap((searchQuery) => Array.from({ length: pagesPerQuery }, (_, page) => ({ query: searchQuery, page: page + 1 })));
   const requests = requestedPages.slice(0, maxRequests);
   const country = String(args.country || 'IN').toLowerCase().slice(0, 2);
