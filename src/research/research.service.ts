@@ -305,7 +305,6 @@ export class ResearchService {
 
 export function isReadOnlyResearchTool(tool: ResearchTool): boolean {
   const normalizedName = tool.name.replace(/([a-z0-9])([A-Z])/g, '$1_$2');
-  const identity = (normalizedName + ' ' + (tool.description ?? '')).trim();
   if (MUTATING_TOOL_PATTERN.test(normalizedName)) return false;
   if (tool.annotations?.destructiveHint === true || tool.annotations?.readOnlyHint === false) return false;
   if (tool.annotations?.readOnlyHint === true) return true;
