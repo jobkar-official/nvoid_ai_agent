@@ -685,7 +685,7 @@
         "hours_old": 720,
         "is_remote": false,
         "country_indeed": "India",
-        "fetch_description": true,
+        "fetch_description": false,
         "description_format": "markdown"
       }
     }
