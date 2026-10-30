@@ -1,7 +1,9 @@
 FROM golang:1.27.3-bookworm AS openings-build
 
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /src/openings-mcp
-RUN git clone --depth 1 https://github.com/amikai/openings-mcp.git . \
+RUN mkdir -p /out && git clone --depth 1 https://github.com/amikai/openings-mcp.git . \
     && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/openings-mcp ./cmd/openings-mcp
 
 FROM ghcr.io/astral-sh/uv:latest AS uv-bin
