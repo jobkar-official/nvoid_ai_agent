@@ -1,15 +1,15 @@
 import { createHash } from 'node:crypto';
 import type { JobProfile, NormalizedJob } from '../common/job.types';
 
-const TITLE_KEYS = ['title', 'jobTitle', 'job_title', 'position', 'role', 'name', 'designation'];
-const COMPANY_KEYS = ['company', 'companyName', 'company_name', 'employer', 'organization', 'organisation'];
-const URL_KEYS = ['applicationUrl', 'application_url', 'applyUrl', 'apply_url', 'applyLink', 'apply_link', 'careerUrl', 'career_url', 'jobUrl', 'job_url', 'url', 'link', 'externalUrl'];
+const TITLE_KEYS = ['title', 'jobTitle', 'job_title', 'position', 'role', 'name', 'designation', 't'];
+const COMPANY_KEYS = ['company', 'companyName', 'company_name', 'employer', 'organization', 'organisation', 'co'];
+const URL_KEYS = ['applicationUrl', 'application_url', 'applyUrl', 'apply_url', 'applyLink', 'apply_link', 'careerUrl', 'career_url', 'jobUrl', 'job_url', 'job_url_direct', 'url', 'link', 'externalUrl'];
 const ID_KEYS = ['id', 'jobId', 'job_id', 'externalId', 'external_id', 'job_uuid'];
-const LOCATION_KEYS = ['location', 'jobLocation', 'job_location', 'jobGeo', 'job_geo', 'locationRestrictions', 'location_restrictions', 'allowedCountries', 'allowed_countries', 'eligibleLocations', 'eligible_locations', 'city', 'locations', 'address', 'region'];
+const LOCATION_KEYS = ['location', 'jobLocation', 'job_location', 'jobGeo', 'job_geo', 'locationRestrictions', 'location_restrictions', 'allowedCountries', 'allowed_countries', 'eligibleLocations', 'eligible_locations', 'city', 'locations', 'address', 'region', 'loc'];
 const DESCRIPTION_KEYS = ['description', 'jobDescription', 'job_description', 'summary', 'details', 'snippet'];
 const SALARY_MIN_KEYS = ['salaryMin', 'salary_min', 'minSalary', 'min_salary', 'salary_from', 'minimumSalary'];
 const SALARY_MAX_KEYS = ['salaryMax', 'salary_max', 'maxSalary', 'max_salary', 'salary_to', 'maximumSalary'];
-const POSTED_KEYS = ['postedAt', 'posted_at', 'datePosted', 'date_posted', 'createdAt', 'created_at', 'publishedAt', 'pubDate', 'pub_date', 'date', 'epoch'];
+const POSTED_KEYS = ['postedAt', 'posted_at', 'posted', 'postedDate', 'posted_date', 'datePosted', 'date_posted', 'createdAt', 'created_at', 'publishedAt', 'pubDate', 'pub_date', 'date', 'epoch', 'age'];
 
 export function parseMcpJobResult(result: unknown): unknown[] {
   if (!result || typeof result !== 'object') return [];
@@ -68,7 +68,7 @@ export function normalizeJob(rawValue: unknown, source: string, profile: JobProf
   const company = getString(raw, COMPANY_KEYS);
   const location = getString(raw, LOCATION_KEYS);
   const jobUrl = normalizeUrl(getString(raw, ['jobUrl', 'job_url', 'externalUrl', 'external_url', 'url', 'link', 'jobLink', 'job_link']));
-  const applicationUrl = normalizeUrl(getString(raw, ['applicationUrl', 'application_url', 'applyUrl', 'apply_url', 'applyLink', 'apply_link', 'careerUrl', 'career_url'])) ?? jobUrl;
+  const applicationUrl = normalizeUrl(getString(raw, ['applicationUrl', 'application_url', 'applyUrl', 'apply_url', 'applyLink', 'apply_link', 'careerUrl', 'career_url', 'job_url_direct', 'jobUrlDirect'])) ?? jobUrl;
   const sourceJobId = getString(raw, ID_KEYS);
   const identity = jobUrl ?? `${source}:${sourceJobId ?? ''}:${title}:${company ?? ''}:${location ?? ''}`;
   const id = createHash('sha256').update(identity.toLowerCase()).digest('hex').slice(0, 32);
@@ -83,6 +83,7 @@ export function normalizeJob(rawValue: unknown, source: string, profile: JobProf
     location,
     country: getString(raw, ['country', 'countryName', 'country_name']),
     description: getString(raw, DESCRIPTION_KEYS),
+    salary: getString(raw, ['salary', 'sal', 'salaryRange', 'salary_range', 'salaryText', 'salary_text', 'compensation', 'payRange', 'pay_range', 'remuneration']),
     jobUrl,
     applicationUrl,
     employmentType: getString(raw, ['employmentType', 'employment_type', 'jobType', 'job_type', 'type']),
@@ -91,7 +92,7 @@ export function normalizeJob(rawValue: unknown, source: string, profile: JobProf
     salaryMax: getNumber(raw, SALARY_MAX_KEYS),
     salaryCurrency: getString(raw, ['salaryCurrency', 'salary_currency', 'currency']),
     postedAt: getString(raw, POSTED_KEYS),
-    experience: getString(raw, ['experience', 'experienceLevel', 'experience_level', 'jobLevel', 'job_level', 'yearsExperience']),
+    experience: getString(raw, ['experience', 'experienceLevel', 'experience_level', 'jobLevel', 'job_level', 'yearsExperience', 'years_of_experience', 'experienceRange', 'experience_range', 'seniorityLevel']),
     matchScore: score,
     matchReasons: reasons,
     raw,
