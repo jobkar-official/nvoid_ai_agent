@@ -105,7 +105,12 @@ export class JobDiscoveryService {
               location: effectiveProfile.location,
               limit: Math.min(100, requestedLimit),
             }
-          : toolArgs;
+          : entry.server.id === 'aidevboard'
+            ? {
+                ...(toolArgs ?? {}),
+                query: [effectiveProfile.jobTitle, effectiveProfile.location].filter(Boolean).join(' '),
+              }
+            : toolArgs;
         const result = entry.server.id === 'jobicy'
           ? await this.callJobicyWithCache(entry.server.id, entry.tool, sourceArgs)
           : await this.mcpRegistry.callTool(entry.server.id, entry.tool, sourceArgs);
