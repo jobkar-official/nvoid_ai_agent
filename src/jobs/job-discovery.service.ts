@@ -55,6 +55,18 @@ export class JobDiscoveryService {
     private readonly aiAgent: AiAgentService,
   ) {}
 
+  getSearchSources() {
+    const searchable = new Map(this.mcpRegistry.getJobSearchServers().map((entry) => [entry.server.id, entry]));
+    return this.mcpRegistry.getStatuses().map((status) => {
+      const jobSource = searchable.get(status.id);
+      return {
+        ...status,
+        jobSearchAvailable: Boolean(jobSource),
+        searchTool: jobSource?.tool,
+      };
+    });
+  }
+
   async search(profile: JobProfile, limit: number, serverIds?: string[], syncToBackend = true): Promise<SearchResult> {
     if (!profile.jobTitle?.trim()) throw new BadRequestException('Enter a target job title before searching.');
     if (!profile.location?.trim() && !(profile.countries ?? []).some((country) => country.trim() && !/^(worldwide|global|anywhere|remote|all countries)$/i.test(country.trim()))) {
@@ -64,7 +76,7 @@ export class JobDiscoveryService {
     const maximum = this.configService.get<number>('maxSearchResults', 200);
     const requestedLimit = Math.min(Math.max(1, limit), maximum);
     const effectiveProfile: JobProfile = { ...profile, location: profile.location?.trim() || (profile.countries ?? []).filter((country) => country.trim()).join(', ') || 'Worldwide' };
-    const servers = this.mcpRegistry.getJobSearchServers().filter((item) => !serverIds?.length || serverIds.includes(item.server.id));
+    const servers = this.mcpRegistry.getJobSearchServers().filter((item) => serverIds === undefined || serverIds.includes(item.server.id));
     if (servers.length === 0) {
       throw new ServiceUnavailableException('No connected MCP server has a configured or discoverable job-search tool. Configure jobSearch.tool for each MCP server in config/mcp-servers.json.');
     }

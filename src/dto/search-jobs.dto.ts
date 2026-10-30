@@ -143,6 +143,7 @@ export class SearchJobsDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMinSize(1)
   @ArrayMaxSize(50)
   @IsString({ each: true })
   serverIds?: string[];
