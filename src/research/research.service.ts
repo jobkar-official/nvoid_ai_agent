@@ -106,7 +106,8 @@ export class ResearchService {
     const maxRecords = Math.min(1000, Math.max(1, dto.maxRecords ?? 100));
     const maxTools = Math.min(40, Math.max(1, dto.maxTools ?? 20));
     const statuses = this.registry.getStatuses();
-    const statusById = new Map(statuses.map((status) => [status.id, status]));
+    const statusById = new Map<string, (typeof statuses)[number]>();
+    for (const status of statuses) statusById.set(status.id, status);
     const selectedServers = new Set(dto.serverIds ?? []);
     const connectedCatalog = this.registry.getToolCatalog() as Array<{
       serverId: string;
