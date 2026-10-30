@@ -239,14 +239,18 @@ async function searchWeb(args) {
   const requests = requestedPages.slice(0, maxRequests);
   const country = String(args.country || 'IN').toLowerCase().slice(0, 2);
   const pageResponses = await runConcurrent(requests, 6, async (request) => {
-    const response = await fetch('https://google.serper.dev/search', {
-      method: 'POST',
-      headers: { accept: 'application/json', 'content-type': 'application/json', 'X-API-KEY': apiKey, 'user-agent': USER_AGENT },
-      body: JSON.stringify({ q: request.query, gl: country, hl: 'en', num: 10, page: request.page }),
-      signal: AbortSignal.timeout(20000),
-    });
-    if (!response.ok) throw new Error('Serper returned HTTP ' + response.status + '. Check the API key, credits and rate limits.');
-    return { ...request, data: await response.json() };
+    try {
+      const response = await fetch('https://google.serper.dev/search', {
+        method: 'POST',
+        headers: { accept: 'application/json', 'content-type': 'application/json', 'X-API-KEY': apiKey, 'user-agent': USER_AGENT },
+        body: JSON.stringify({ q: request.query, gl: country, hl: 'en', num: 10, page: request.page }),
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!response.ok) return { ...request, error: 'Serper returned HTTP ' + response.status + '. Check the API key, credits and rate limits.' };
+      return { ...request, data: await response.json() };
+    } catch (error) {
+      return { ...request, error: error instanceof Error ? error.message : String(error) };
+    }
   });
   const searchErrors = pageResponses.filter((item) => item?.error);
   const organic = pageResponses.flatMap((item) => Array.isArray(item?.data?.organic)
@@ -269,7 +273,8 @@ async function searchWeb(args) {
     return candidate;
   });
   const requestBudgetReached = requestedPages.length > requests.length;
-  const providerResultCapReached = candidates.length >= Math.min(limit, requests.length * 10) && candidates.length < limit;
+  const providerResultCapReached = candidates.length >= Math.min(limit, (requests.length - searchErrors.length) * 10) && candidates.length < limit;
+  const crawlBudgetReached = crawlEnabled && candidates.length > crawlCount;
   return {
     records,
     searchReport: {
@@ -281,16 +286,20 @@ async function searchWeb(args) {
       searchRequestsExecuted: requests.length,
       searchRequestsSucceeded: requests.length - searchErrors.length,
       failedSearchRequests: searchErrors.length,
+      searchRequestErrors: searchErrors.slice(0, 30).map((item) => ({ query: item.query, page: item.page, error: item.error })),
       indexedResults: organic.length,
       uniqueSearchResults: candidates.length,
+      publicPagesAvailable: candidates.length,
       publicPagesAttempted: crawlCount,
       publicPagesFetched: pagesFetched,
+      publicPagesNotAttempted: crawlEnabled ? Math.max(0, candidates.length - crawlCount) : 0,
+      crawlBudgetReached,
       failedPageFetches: fetchErrors.length,
       pageFetchErrors: fetchErrors.slice(0, 30),
       recordLimit: limit,
       requestBudgetReached,
       providerResultCapReached,
-      truncated: requestBudgetReached || providerResultCapReached,
+      truncated: requestBudgetReached || providerResultCapReached || searchErrors.length > 0 || crawlBudgetReached,
     },
   };
 }
