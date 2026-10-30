@@ -76,6 +76,20 @@ describe('research MCP argument mapping', () => {
     }, 100)).toBeUndefined();
   });
 
+  it('infers an explicit country code without confusing it with the city', () => {
+    expect(inferResearchArguments('Find Java engineers in the United States', {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        country: { type: 'string' },
+      },
+      required: ['query'],
+    }, 100)).toEqual({
+      query: 'Find Java engineers in the United States',
+      country: 'US',
+    });
+  });
+
   it('does not treat an extracted city as a country code or countries list', () => {
     expect(inferResearchArguments('Find software engineers in Bengaluru', {
       type: 'object',
@@ -186,6 +200,8 @@ describe('ResearchService', () => {
     const result = await service.run({ query: 'Search records', maxRecords: 10, maxTools: 5 });
     expect(result.report.configuredServers).toBe(2);
     expect(result.report.connectedServers).toBe(1);
+    expect(result.report.selectedServers).toBe(2);
+    expect(result.report.selectedConnectedServers).toBe(1);
     expect(result.report.perConnector).toEqual(expect.arrayContaining([
       expect.objectContaining({ serverId: 'offline', connected: false, connectionError: 'Connection refused', callsSucceeded: 0 }),
     ]));
