@@ -1,8 +1,23 @@
 const {
+  buildDorkQueries,
   extractPage,
   htmlText,
   normalizeOrganic,
 } = require('../../scripts/search-engine-research-mcp-server.cjs');
+
+describe('Google dork query expansion', () => {
+  it('expands plain-language research into complementary public-web dorks', () => {
+    const queries = buildDorkQueries('Java backend developer jobs in India');
+    expect(queries).toContain('"Java backend developer jobs in India"');
+    expect(queries).toContain('intitle:"Java backend developer"');
+    expect(queries.some((query) => query.startsWith('site:linkedin.com/jobs'))).toBe(true);
+    expect(queries.some((query) => query.startsWith('site:naukri.com'))).toBe(true);
+  });
+
+  it('preserves an explicit user-provided Google dork without rewriting it', () => {
+    expect(buildDorkQueries('site:example.com intitle:careers Java')).toEqual([]);
+  });
+});
 
 describe('public web research MCP crawler parsing', () => {
   it('normalizes real organic result fields and removes duplicate URLs', () => {
