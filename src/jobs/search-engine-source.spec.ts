@@ -19,6 +19,8 @@ describe('search-engine job crawler', () => {
     expect(queries.some((q) => q.includes('site:boards.greenhouse.io'))).toBe(true);
     expect(queries.some((q) => q.includes('site:gov.in'))).toBe(true);
     expect(queries.some((q) => q.includes('tender procurement RFP'))).toBe(true);
+    const remoteQueries = crawler.buildSearchQueries({ query: 'Java Developer', location: 'Bengaluru, India', remote: true });
+    expect(remoteQueries.some((q) => q.includes('remote work from anywhere'))).toBe(true);
   });
   it('separates role families and specific technologies', () => {
     expect(crawler.family('Software Developer')).toBe('software');
