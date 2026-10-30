@@ -26,6 +26,7 @@ export interface SearchSourceReport {
   requestsMade?: number;
   rawIndexedResults?: number;
   uniqueRoleLocationUrls?: number;
+  linkedJobUrlsDiscovered?: number;
   publicJobPagesFetched?: number;
   structuredJobPages?: number;
   metadataOnlyListings?: number;
