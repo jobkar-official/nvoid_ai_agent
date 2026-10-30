@@ -216,28 +216,37 @@ function companyFrom(url) {
   if(/jobs\.lever\.co|boards\.greenhouse\.io|jobs\.ashbyhq\.com/.test(h)&&parts[0])return parts[0].replace(/[-_]/g,' ');
   return h.split('.').filter(x=>!['jobs','careers','career','apply','boards','www'].includes(x))[0]||h;
 }
+function opportunityType(title,description,url) {
+  const evidence=norm([title,description,url].join(' '));
+  if(/\b(tender|procurement|request for proposal|rfp|request for information|rfi|expression of interest|eoi|solicitation|bid submission|public bid)\b/.test(evidence))return 'tender';
+  if(/\b(internship|intern|apprenticeship|apprentice|fellowship|trainee)\b/.test(evidence))return 'early-career';
+  if(/\b(government|public sector|civil service|public service commission|recruitment notification|employment notification|vacancy notice|official advertisement|department recruitment)\b/.test(evidence))return 'government-recruitment';
+  return 'employment';
+}
 function mapPosting(posting,candidate,page) {
   const loc=[].concat(posting.jobLocation||[]).map(x=>typeof x==='object'?JSON.stringify(x.address||x):String(x)).join(' ');
   const allowed=typeof posting.applicantLocationRequirements==='string'?posting.applicantLocationRequirements:JSON.stringify(posting.applicantLocationRequirements||'');
   const title=clean(posting.title||page.title||candidate.title),description=clean(posting.description||page.description||candidate.description);
   const remote=/telecommute/i.test(String(posting.jobLocationType||'')),u=safeUrl(posting.url||posting.sameAs||page.canonicalUrl||candidate.url);
-  return{id:u?u.href:candidate.url,title,company:clean(posting.hiringOrganization?.name||candidate.company||companyFrom(new URL(candidate.url))),location:(loc+' '+allowed).trim()||(remote?'Remote · eligibility not stated':''),country:country(loc+' '+allowed)||'',description,tags:clean(posting.skills||posting.qualifications||''),employmentType:clean(posting.employmentType||''),workMode:remote?'Remote':'',postedAt:clean(posting.datePosted||''),url:u?u.href:candidate.url,source:SOURCE,raw:{sourceDomain:candidate.domain,indexedTitle:candidate.title,indexedSnippet:candidate.description,searchQuery:candidate.query,schemaJobPosting:true}};
+  return{id:u?u.href:candidate.url,title,company:clean(posting.hiringOrganization?.name||candidate.company||companyFrom(new URL(candidate.url))),location:(loc+' '+allowed).trim()||(remote?'Remote · eligibility not stated':''),country:country(loc+' '+allowed)||'',description,tags:clean(posting.skills||posting.qualifications||''),employmentType:clean(posting.employmentType||''),workMode:remote?'Remote':'',postedAt:clean(posting.datePosted||''),url:u?u.href:candidate.url,source:SOURCE,raw:{sourceDomain:candidate.domain,indexedTitle:candidate.title,indexedSnippet:candidate.description,searchQuery:candidate.query,schemaJobPosting:true,opportunityType:'employment'}};
 }
 function mapResult(candidate,page) {
   const u=safeUrl(candidate.url);if(!u)return undefined;
-  const title=clean(page?.title||candidate.title),description=clean([page?.description,candidate.description,...candidate.extra].filter(Boolean).join(' ')),e=title+' '+description+' '+u.href;
+  const pageTitle=clean(page?.title||''),description=clean([page?.description,candidate.description,...candidate.extra].filter(Boolean).join(' '));
+  const title=pageTitle&&matchesRole(pageTitle,description,candidate.role)?pageTitle:clean(candidate.title||pageTitle);
+  const e=title+' '+description+' '+u.href,kind=opportunityType(title,description,u.href);
   const remote=/\b(remote|telecommute|work from home)\b/i.test(e);let loc='';
   if(/\b(worldwide|work from anywhere|remote worldwide|all countries)\b/i.test(e))loc='Worldwide';
   else if(norm(e).includes(norm(candidate.location)))loc=candidate.location;
   else if(country(e))loc=country(e);
-  return{id:u.href,title,company:candidate.company||companyFrom(u),location:loc||(remote?'Remote · eligibility not stated':''),country:country(e)||'',description,tags:'',employmentType:'',workMode:remote?'Remote':'',postedAt:candidate.age||'',url:u.href,source:SOURCE,raw:{sourceDomain:candidate.domain,indexedTitle:candidate.title,indexedSnippet:candidate.description,searchQuery:candidate.query,schemaJobPosting:false}};
+  return{id:u.href,title,company:candidate.company||companyFrom(u),location:loc||(remote?'Remote · eligibility not stated':''),country:country(e)||'',description,tags:kind==='employment'?'':kind,employmentType:'',workMode:remote?'Remote':'',postedAt:candidate.age||'',url:u.href,source:SOURCE,raw:{sourceDomain:candidate.domain,indexedTitle:candidate.title,indexedSnippet:candidate.description,searchQuery:candidate.query,schemaJobPosting:false,opportunityType:kind,indexedUrl:u.href}};
 }
 function candidateFromResult(r,role,location,q) {
   if(!r?.url)return undefined;const u=safeUrl(r.url);
   const title=clean(r.title||''),desc=clean(r.description||r.snippet||''),extra=(r.extra_snippets||[]).map(clean);
   if(!u||!isJobUrl(u.href,[title,desc,...extra].join(' ')))return undefined;
   if(!matchesRole(title,[desc,...extra].join(' '),role))return undefined;
-  return{url:u.href,title,description:desc,extra,domain:clean(r.profile?.long_name||r.profile?.name||u.hostname),company:clean(r.profile?.name||''),age:clean(r.page_age||''),query:q,location};
+  return{url:u.href,title,description:desc,extra,domain:clean(r.profile?.long_name||r.profile?.name||u.hostname),company:clean(r.profile?.name||''),age:clean(r.page_age||''),query:q,location,role};
 }
 function normalizeSearchResponse(data) {
   const results = Array.isArray(data?.organic) ? data.organic.map((item) => {
@@ -306,8 +315,8 @@ async function discover(args,limit) {
   const unique=new Map();let structured=0,metadata=0;
   for(const item of crawled){if(!item)continue;
     if(item.page?.postings?.length){let accepted=false;
-      for(const posting of item.page.postings){const job=mapPosting(posting,item.candidate,item.page);if(!job.url||!isJobUrl(job.url)||!matchesRole(job.title,job.description,role)||!locationMatch(job.location,job.description,job.url,location))continue;if(!unique.has(job.url))unique.set(job.url,job);accepted=true;}
-      if(accepted)structured++;continue;
+      for(const posting of item.page.postings){const job=mapPosting(posting,item.candidate,item.page);if(!job.url||!isJobUrl(job.url,job.title+' '+job.description)||!matchesRole(job.title,job.description,role)||!locationMatch(job.location,job.description,job.url,location))continue;if(!unique.has(job.url))unique.set(job.url,job);accepted=true;}
+      if(accepted){structured++;continue;}
     }
     const job=mapResult(item.candidate,item.page);if(job&&matchesRole(job.title,job.description,role)&&locationMatch(job.location,job.description,job.url,location)){if(!unique.has(job.url))unique.set(job.url,job);metadata++;}
   }
