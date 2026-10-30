@@ -271,7 +271,7 @@ export class JobDiscoveryService {
 
 
 export 
-export function parseJobDataLakeSearchResult(result: unknown): unknown[] {
+export export function parseJobDataLakeSearchResult(result: unknown): unknown[] {
   const text = extractMcpText(result);
   if (!text) return [];
   const lines = text.split(/\r?\n/);
@@ -310,7 +310,7 @@ export function parseJobDataLakeSearchResult(result: unknown): unknown[] {
   return jobs;
 }
 
-export function parseJobDataLakeDetailResult(result: unknown): unknown[] {
+export export function parseJobDataLakeDetailResult(result: unknown): unknown[] {
   const text = extractMcpText(result);
   if (!text) return [];
   const lines = text.split(/\r?\n/);
