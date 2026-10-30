@@ -10,9 +10,9 @@ The default runtime configuration enables seven live public job sources: Jobicy,
 
 ### Search-engine discovery and public-page crawling
 
-The optional **Serper Google Search and Public Job Page Crawler** builds dork-style queries from the candidate's role, location, skills and keywords. Query families cover company career pages and ATS/job boards including Greenhouse, Lever, Ashby, Workday, SmartRecruiters, LinkedIn Jobs, Naukri, Indeed, Foundit, Apna and Wellfound. It deduplicates indexed URLs, fetches a bounded number of public job pages, extracts schema.org `JobPosting` JSON-LD where available, and applies role/location filters. It does not log into sites or bypass CAPTCHA/access controls.
+The optional **Serper Google Search and Public Opportunity Crawler** expands one candidate search into Google-style dorks for role variants, city aliases, job boards, ATS platforms, company career pages, public-sector recruitment and relevant tender/procurement notices. It searches public indexed URLs across known and previously unknown domains, fetches a bounded number of public pages, extracts schema.org `JobPosting` JSON-LD where available, classifies non-job opportunities separately, and applies role/location relevance checks. It does not log into sites or bypass CAPTCHA/access controls.
 
-Enable Greenhouse, Lever or Ashby board crawling by setting comma-separated company board slugs in `GREENHOUSE_BOARDS`, `LEVER_SITES` or `ASHBY_BOARDS`. These connectors scan only the boards configured by you. Enable web-index discovery by setting `SERPER_API_KEY` in the worker `.env` and restarting; it auto-enables in the default config. Its target is up to 1,000 records per profile, and `searchReport` gives request counts, crawled pages, structured-data hits and whether the requested count was reached. **1,000 is a target, not a guarantee**: if the web index has fewer suitable results for the profile, the agent reports the actual count instead of inventing jobs. Search API use may incur charges.
+Enable Greenhouse, Lever or Ashby board crawling by setting comma-separated company board slugs in `GREENHOUSE_BOARDS`, `LEVER_SITES` or `ASHBY_BOARDS`. These connectors scan only the boards configured by you. Enable web discovery with `SERPER_API_KEY` in the worker `.env`; it auto-enables on restart. The default dork plan expands up to 36 queries and 72 paginated requests, then fetches up to 250 public result pages. These requests consume Serper credits. The result target is up to 1,000 records, not a guarantee: indexed coverage, source accessibility and relevance filtering determine the actual count. The search report includes indexed URLs, fetched pages, structured postings, opportunity categories and counts rejected by URL, role or location.
 
 Exact city eligibility depends on indexed snippets and job-page metadata. Remote pages without location eligibility evidence are not considered eligible for a specific city.
 
@@ -24,9 +24,9 @@ The worker also includes credentialed adapters for:
 - **Apna** — through the third-party Apify actor `automation-lab/apna-india-job-listings-scraper`.
 - **Adzuna** and **Jooble** — via their respective search APIs when account credentials are configured.
 
-These sources automatically enable after the relevant credentials are present in the worker's server-side `.env` and the process restarts. The Apify actors are third-party services, not official APIs for those boards, and may charge per job returned plus platform/proxy usage. They return public listings, not credentials, user profiles, or successful applications. Configure small result limits and respect applicable provider/site terms. The direct MCP slots for individual platforms remain disabled unless you supply a real endpoint, token, and actual search-tool schema.
+These sources automatically enable after the relevant credentials are present in the worker's server-side `.env` and the process restarts. The Apify actors are third-party services, not official APIs for those boards, and may charge per job returned plus platform/proxy usage. They return public listings, not credentials, user profiles, or successful applications. Configure small result limits and respect applicable provider/site terms. Direct Naukri, Indeed, LinkedIn, Glassdoor and Apna MCP slots auto-enable when their matching `*_MCP_URL` and `*_MCP_TOKEN` values are present. The registry discovers a suitable search tool from the connected MCP tool catalogue and infers common query/location/limit arguments from its input schema. If a connector uses non-standard required arguments, configure its `jobSearch.arguments` explicitly.
 
-The synthetic demo MCP source is disabled in `config/mcp-servers.json` and isolated in `config/mcp-servers.test.json` for CI. MCP servers connected in ChatGPT or another desktop host are not automatically available to this worker.
+The synthetic demo MCP source is disabled in `config/mcp-servers.json` and isolated in `config/mcp-servers.test.json` for CI. MCP servers connected in ChatGPT or another desktop host are not automatically available to this worker; configure their actual MCP endpoint and credentials here.
 
 ## Features
 
@@ -120,9 +120,9 @@ Add a Serper Google Search API key to the worker's existing `.env` without overw
 ```dotenv
 SERPER_API_KEY=your-private-serper-search-api-key
 SERPER_SEARCH_MAX_RESULTS=1000
-SERPER_SEARCH_MAX_QUERIES=18
-SERPER_SEARCH_MAX_PAGES_PER_QUERY=10
-SERPER_SEARCH_MAX_REQUESTS=80
+SERPER_SEARCH_MAX_QUERIES=36
+SERPER_SEARCH_MAX_PAGES_PER_QUERY=4
+SERPER_SEARCH_MAX_REQUESTS=72
 SERPER_SEARCH_MAX_PAGE_FETCHES=250
 SERPER_SEARCH_CONCURRENCY=10
 SERPER_SEARCH_PAGE_CRAWL_CONCURRENCY=20
