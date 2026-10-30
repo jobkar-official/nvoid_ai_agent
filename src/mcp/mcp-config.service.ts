@@ -44,6 +44,7 @@ export class McpConfigService {
       });
       const canEnable =
         server.id === 'serper-search' && has('SERPER_API_KEY') ||
+        server.id === 'serper-research' && has('SERPER_API_KEY') ||
         server.id === 'naukri' && has('NAUKRI_MCP_URL', 'NAUKRI_MCP_TOKEN') ||
         server.id === 'indeed' && has('INDEED_MCP_URL', 'INDEED_MCP_TOKEN') ||
         server.id === 'linkedin' && has('LINKEDIN_MCP_URL', 'LINKEDIN_MCP_TOKEN') ||
