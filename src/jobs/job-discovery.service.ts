@@ -167,7 +167,17 @@ export class JobDiscoveryService {
       return { ...job, matchScore: Math.max(job.matchScore, match.score), matchReasons: [...new Set([...job.matchReasons, ...match.reasons])] };
     });
     const initiallyRanked = candidates.sort((a, b) => b.matchScore - a.matchScore);
-    const detailTargets = initiallyRanked.slice(0, Math.min(10, initiallyRanked.length));
+    const detailTargetsBySource = new Map<string, NormalizedJob[]>();
+    for (const job of initiallyRanked) {
+      const serverId = sourceForJobId.get(job.id);
+      if (!serverId) continue;
+      const sourceTargets = detailTargetsBySource.get(serverId) ?? [];
+      if (sourceTargets.length < 3) {
+        sourceTargets.push(job);
+        detailTargetsBySource.set(serverId, sourceTargets);
+      }
+    }
+    const detailTargets = [...detailTargetsBySource.values()].flat().slice(0, 24);
     const detailedJobs = await Promise.all(detailTargets.map((job) => this.enrichJobDetails(
       job,
       sourceForJobId.get(job.id),
