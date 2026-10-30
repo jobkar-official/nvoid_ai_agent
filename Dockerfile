@@ -30,8 +30,8 @@ ENV NODE_ENV=production
 ENV UV_LINK_MODE=copy
 ENV UV_CACHE_DIR=/root/.cache/uv
 
-RUN uvx --from mcp-jobspy@latest python -c "from jobspy.mcp import server; print('JobSpy MCP runtime ready')" \\
-    && uvx linkedin-mcp-zero --help >/dev/null \\
+RUN uvx --from mcp-jobspy@latest python -c "from jobspy.mcp import server; print('JobSpy MCP runtime ready')" \
+    && uvx linkedin-mcp-zero --help >/dev/null \
     && /usr/local/bin/openings-mcp --version
 
 EXPOSE 3100
