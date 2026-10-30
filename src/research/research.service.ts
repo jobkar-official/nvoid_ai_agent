@@ -253,7 +253,7 @@ export class ResearchService {
           serverName: tool.serverName,
           toolName: tool.toolName,
           ...(title ? { title } : {}),
-          ...(url && /^https?:\\/\\//i.test(url) ? { url } : {}),
+          ...(url && url.startsWith('http') ? { url } : {}),
           data: safeData,
         });
       }
