@@ -219,31 +219,36 @@ export class ResearchService {
     const rawRecords = executions.flatMap((result) => result.records);
     const unique = new Map<string, ResearchRecord>();
     let duplicatesRemoved = 0;
-    for (const [index, value] of rawRecords.entries()) {
-      const object = asRecord(value);
-      if (!object) continue;
-      const key = recordKey(object);
-      if (unique.has(key)) {
-        duplicatesRemoved += 1;
-        continue;
+    let capReached = false;
+    researchLoop: for (const execution of executions) {
+      for (const value of execution.records) {
+        const object = asRecord(value);
+        if (!object) continue;
+        const key = recordKey(object);
+        if (unique.has(key)) {
+          duplicatesRemoved += 1;
+          continue;
+        }
+        if (unique.size >= maxRecords) {
+          capReached = true;
+          break researchLoop;
+        }
+        const tool = execution.call;
+        const safeData = boundValue(object) as Record<string, unknown>;
+        const title = stringField(object, ['title', 'name', 'company', 'subject', 'headline', 'label']);
+        const url = stringField(object, ['url', 'jobUrl', 'job_url', 'href', 'permalink', 'link', 'website']);
+        unique.set(key, {
+          id: 'record-' + (unique.size + 1),
+          serverId: tool.serverId,
+          serverName: tool.serverName,
+          toolName: tool.toolName,
+          ...(title ? { title } : {}),
+          ...(url && /^https?:\\/\\//i.test(url) ? { url } : {}),
+          data: safeData,
+        });
       }
-      const sourceCall = executions.find((result) => result.records.includes(value))?.call;
-      const tool = sourceCall ?? calls[0];
-      const safeData = boundValue(object) as Record<string, unknown>;
-      const title = stringField(object, ['title', 'name', 'company', 'subject', 'headline', 'label']);
-      const url = stringField(object, ['url', 'jobUrl', 'job_url', 'href', 'permalink', 'link', 'website']);
-      unique.set(key, {
-        id: 'record-' + (unique.size + 1),
-        serverId: tool?.serverId ?? 'unknown',
-        serverName: tool?.serverName ?? tool?.serverId ?? 'Unknown source',
-        toolName: tool?.toolName ?? 'unknown',
-        ...(title ? { title } : {}),
-        ...(url && /^https?:\/\//i.test(url) ? { url } : {}),
-        data: safeData,
-      });
-      if (unique.size >= maxRecords) break;
     }
-    if (unique.size >= maxRecords && rawRecords.length > unique.size) {
+    if (capReached) {
       warnings.push('The unique-record cap was reached. Additional source records may exist but were not included in this response.');
     }
 
@@ -278,7 +283,7 @@ export class ResearchService {
         uniqueRecords: records.length,
         duplicatesRemoved,
         maxRecords,
-        truncated: rawRecords.length > records.length || records.length >= maxRecords,
+        truncated: capReached,
         perConnector,
       },
       calls,
