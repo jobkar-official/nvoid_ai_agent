@@ -35,6 +35,10 @@ export interface SearchSourceReport {
   reachedRequestedLimit?: boolean;
   moreSearchResultsAvailable?: boolean;
   failedSearchRequests?: number;
+  rejectedUrlResults?: number;
+  rejectedRoleResults?: number;
+  rejectedLocationResults?: number;
+  opportunityTypes?: Record<string, number>;
   truncated?: boolean;
 }
 
