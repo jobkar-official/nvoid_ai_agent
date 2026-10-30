@@ -147,6 +147,11 @@ function buildSearchQueries(profile) {
   }
   add(role+' '+place+' hiring recruitment employment opportunities');
   add(role+' '+place+' company career pages');
+  if(profile.remote===true){
+    add(role+' remote '+place+' jobs work from home');
+    add(role+' remote work from anywhere '+place+' careers');
+    add(role+' distributed remote team '+place+' vacancies');
+  }
   add('inurl:careers '+role+' '+place);
   add('inurl:jobs '+role+' '+place);
   add('intitle:recruitment '+role+' '+place+' vacancy OR notification');
@@ -307,7 +312,7 @@ async function discover(args,limit) {
   const role=String(args.query||'').trim(),location=String(args.location||(args.countries||[]).join(', ')||'').trim();
   if(!role||!location)throw new Error('Both target job title and preferred location are required.');
   if(!process.env.SERPER_API_KEY||String(process.env.SERPER_API_KEY).includes('$'+'{'))throw new Error('Serper search is disabled. Set SERPER_API_KEY and restart the worker.');
-  const target=Math.min(envInt('SERPER_SEARCH_MAX_RESULTS',1000,50,1000),limit),queries=buildSearchQueries({query:role,location,skills:args.skills,keywords:args.keywords}),pageCap=envInt('SERPER_SEARCH_MAX_PAGES_PER_QUERY',4,1,10),requestCap=envInt('SERPER_SEARCH_MAX_REQUESTS',72,1,120);
+  const target=Math.min(envInt('SERPER_SEARCH_MAX_RESULTS',1000,50,1000),limit),queries=buildSearchQueries({query:role,location,skills:args.skills,keywords:args.keywords,remote:args.remote===true}),pageCap=envInt('SERPER_SEARCH_MAX_PAGES_PER_QUERY',4,1,10),requestCap=envInt('SERPER_SEARCH_MAX_REQUESTS',72,1,120);
   const candidateMap=new Map();let calls=0,indexed=0,failures=0,more=false,rejectedUrl=0,rejectedRole=0,rejectedLocation=0;
   for(let offset=0;offset<pageCap&&calls<requestCap;offset++){
     const tasks=queries.slice(0,Math.min(queries.length,requestCap-calls)).map(q=>({q,offset}));
@@ -400,7 +405,7 @@ async function discover(args,limit) {
 }
 async function search(args) {
   const role=String(args.query||'').trim(),loc=String(args.location||(args.countries||[]).join(', ')||'').trim(),limit=Number.isFinite(Number(args.limit))?Math.min(1000,Math.max(1,Math.floor(Number(args.limit)))):500;
-  const key=JSON.stringify({role,loc,skills:args.skills||[],keywords:args.keywords||[],countries:args.countries||[]}),hit=cache.get(key);
+  const key=JSON.stringify({role,loc,skills:args.skills||[],keywords:args.keywords||[],countries:args.countries||[],remote:args.remote===true,limit}),hit=cache.get(key);
   if(hit&&hit.expires>Date.now())return{...hit.value,jobs:hit.value.jobs.slice(0,limit),report:{...hit.value.report,targetCount:limit,returnedJobs:Math.min(limit,hit.value.jobs.length),reachedRequestedLimit:hit.value.jobs.length>=limit}};
   if(pending.has(key)){const value=await pending.get(key);return{...value,jobs:value.jobs.slice(0,limit)};}
   const work=discover(args,Math.min(limit,envInt('SERPER_SEARCH_MAX_RESULTS',1000,50,1000)));pending.set(key,work);
