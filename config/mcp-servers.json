@@ -679,14 +679,12 @@
           "zip_recruiter",
           "glassdoor",
           "bayt",
-          "naukri",
-          "bdjobs",
-          "hellowork"
+          "naukri"
         ],
         "results_wanted": 10,
         "hours_old": 720,
         "is_remote": false,
-        "country_indeed": "in",
+        "country_indeed": "India",
         "fetch_description": true,
         "description_format": "markdown"
       }
