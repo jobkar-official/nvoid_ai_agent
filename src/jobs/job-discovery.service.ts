@@ -13,7 +13,21 @@ export interface SearchResult {
   returnedCount: number;
   sourceCount: number;
   jobs: NormalizedJob[];
-  sources: Array<{ serverId: string; tool: string; found: number; error?: string; report?: SearchSourceReport; detailsRequested?: number; detailsFetched?: number; detailTool?: string }>;
+  sources: Array<{
+    serverId: string;
+    tool: string;
+    found: number;
+    fetchedCount: number;
+    normalizedCount: number;
+    roleMatchedCount: number;
+    locationMatchedCount: number;
+    connectionStatus: JobSourceResult['connectionStatus'];
+    error?: string;
+    report?: SearchSourceReport;
+    detailsRequested?: number;
+    detailsFetched?: number;
+    detailTool?: string;
+  }>;
   searchReport: SearchSourceReport[];
   backendSync: { synced: boolean; reason?: string };
 }
