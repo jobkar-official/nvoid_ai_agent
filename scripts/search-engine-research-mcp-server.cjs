@@ -98,7 +98,7 @@ function flattenJsonLd(value, output = []) {
 
 function parseJobPostings(html, pageUrl) {
   const nodes = [];
-  const scripts = String(html || '').matchAll(/<script[^>]+type=["']application\\/ld\\+json["'][^>]*>([\\s\\S]*?)<\\/script>/gi);
+  const scripts = String(html || '').matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
   for (const match of scripts) {
     try {
       nodes.push(...flattenJsonLd(JSON.parse(match[1])));
@@ -151,7 +151,7 @@ function parseJobPostings(html, pageUrl) {
 function extractCareerPageLinks(html, pageUrl) {
   const base = new URL(pageUrl);
   const links = new Set();
-  const anchors = String(html || '').matchAll(/<a\\b[^>]*href=["']([^"'#]+)["'][^>]*>([\\s\\S]*?)<\\/a>/gi);
+  const anchors = String(html || '').matchAll(/<a\b[^>]*href=["']([^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi);
   for (const match of anchors) {
     const href = decodeHtml(match[1]).trim();
     const label = htmlText(match[2]).slice(0, 180);
