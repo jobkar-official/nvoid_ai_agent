@@ -53,7 +53,7 @@ function countryForProfile() {
 function isSearchTool(tool) {
   const identity = (tool.name + ' ' + (tool.description || '')).toLowerCase();
   return /(search|find|list|discover|fetch|query).{0,45}(jobs?|vacanc(?:y|ies)|open.?roles?|positions?|opportunit(?:y|ies)|recruitment)|(jobs?|vacanc(?:y|ies)|open.?roles?|positions?|opportunit(?:y|ies)|recruitment).{0,45}(search|find|list|discover|fetch|query)|\bget[_\s-]?(jobs?|vacanc(?:y|ies)|open.?roles?|positions?|opportunit(?:y|ies))\b/i.test(identity)
-    && !/(apply|submit|application|delete|remove|update|create|detail|details|profile|company_profile)/i.test(tool.name)
+    && !/(apply|submit|application|delete|remove|update|create|detail|details|profile|company_profile|_by_company)/i.test(tool.name)
     && tool.annotations?.destructiveHint !== true;
 }
 
