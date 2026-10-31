@@ -665,11 +665,19 @@ function normalizeSchemaToken(value: unknown): string {
 }
 
 function profileCountries(profile: JobProfile): CountryCode[] {
-  const text = normalizeSchemaToken([
-    /^(worldwide|global|anywhere|all countries|all locations)$/i.test(profile.location ?? '') ? '' : profile.location,
-    ...(profile.countries ?? []).filter((country) => !/^(worldwide|global|anywhere|all countries|all locations)$/i.test(country)),
-  ].filter(Boolean).join(' '));
-  return COUNTRY_CODES.filter((country) => country.names.some((name) => text.includes(normalizeSchemaToken(name))));
+  const globalLocation = /^(worldwide|global|anywhere|all countries|all locations)$/i.test(profile.location ?? '');
+  const locationText = normalizeSchemaToken(globalLocation ? '' : profile.location);
+  const countryFromLocation = COUNTRY_CODES.filter((country) =>
+    country.names.some((name) => locationText.includes(normalizeSchemaToken(name))),
+  );
+  if (countryFromLocation.length > 0) return countryFromLocation;
+
+  const countriesText = normalizeSchemaToken((profile.countries ?? [])
+    .filter((country) => !/^(worldwide|global|anywhere|all countries|all locations)$/i.test(country))
+    .join(' '));
+  return COUNTRY_CODES.filter((country) =>
+    country.names.some((name) => countriesText.includes(normalizeSchemaToken(name))),
+  );
 }
 
 function isAlpha2CountryProperty(metadata: InputSchemaProperty): boolean {
@@ -710,24 +718,26 @@ function resolveEnumOption(candidate: string, options: unknown[], propertyName: 
 
 function resolveLocationEnum(options: unknown[], profile: JobProfile, propertyName: string): string | undefined {
   const locationIsGlobal = /^(worldwide|global|anywhere|all countries|all locations)$/i.test(profile.location ?? '');
-  const candidates = [
-    ...(locationIsGlobal ? [] : [profile.location ?? '']),
-    ...(profile.countries ?? []).filter((country) => !/^(worldwide|global|anywhere|all countries|all locations)$/i.test(country)),
-  ].filter(Boolean);
-  for (const candidate of candidates) {
-    const match = options.find((option) => typeof option === 'string'
-      && normalizeSchemaToken(option) === normalizeSchemaToken(candidate));
-    if (typeof match === 'string') return match;
-    const suffixMatch = options.find((option) => typeof option === 'string'
-      && normalizeSchemaToken(option).endsWith(normalizeSchemaToken(candidate))
-      && normalizeSchemaToken(candidate).length >= 4);
-    if (typeof suffixMatch === 'string') return suffixMatch;
-  }
   const countries = profileCountries(profile);
   const normalizedProperty = propertyName.toLowerCase().replace(/[^a-z0-9]/g, '');
   if (normalizedProperty === 'area' && countries.some((country) => country.alpha2 === 'in')) {
     const otherAsia = options.find((option) => typeof option === 'string' && normalizeSchemaToken(option) === 'otherasia');
     if (typeof otherAsia === 'string') return otherAsia;
+  }
+
+  if (locationIsGlobal && countries.length !== 1) return undefined;
+  const candidates = locationIsGlobal
+    ? [countries[0]?.names[0] ?? '']
+    : [profile.location ?? '', ...(countries.length === 1 ? [countries[0].names[0]] : [])].filter(Boolean);
+  for (const candidate of candidates) {
+    const normalizedCandidate = normalizeSchemaToken(candidate);
+    const match = options.find((option) => typeof option === 'string'
+      && normalizeSchemaToken(option) === normalizedCandidate);
+    if (typeof match === 'string') return match;
+    const suffixMatch = options.find((option) => typeof option === 'string'
+      && normalizeSchemaToken(option).endsWith(normalizedCandidate)
+      && normalizedCandidate.length >= 4);
+    if (typeof suffixMatch === 'string') return suffixMatch;
   }
   return undefined;
 }
