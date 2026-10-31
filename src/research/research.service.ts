@@ -419,7 +419,8 @@ function buildStructuredHiringResults(records: ResearchRecord[], limit: number):
       const locations = Array.isArray(posting.locations) ? posting.locations : [];
       const location = asText(posting.location ?? locations.join(', '));
       const experience = asText(posting.experienceRequirements ?? posting.qualifications);
-      const careerPageUrl = asText(posting.careerPageUrl);
+      const careerPageUrl = asText(posting.careerPageUrl)
+        ?? (Array.isArray(record.data.careerPageLinks) ? asText(record.data.careerPageLinks[0]) : undefined);
       jobs.push({
         evidenceId: record.id,
         company,
