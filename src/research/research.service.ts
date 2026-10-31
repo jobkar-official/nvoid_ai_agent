@@ -201,6 +201,8 @@ export class ResearchService {
             ...plans.filter((plan) => !(plan.serverId === publicWebSearch.serverId && plan.toolName === publicWebSearch.tool.name)).slice(0, Math.max(0, maxTools - 1)),
           ];
         }
+      } else {
+        warnings.push('Public web research is not connected. Configure SERPER_API_KEY on the agent worker to search Google and public company career pages.');
       }
     }
     if (planningError) warnings.push(planningError);
@@ -435,11 +437,13 @@ function buildStructuredHiringResults(records: ResearchRecord[], limit: number):
     }
   }
   const unique = jobs.filter((job, index, all) => all.findIndex((item) => item.jobUrl === job.jobUrl) === index).slice(0, limit);
-  if (unique.length === 0) return undefined;
+  const uniqueCompanies = new Set(unique.map((job) => normalizeCompanyName(job.company))).size;
   return {
-    summary: unique.length + ' structured job posting(s) extracted directly from public job pages. Missing fields are not disclosed by the source.',
+    summary: unique.length > 0
+      ? unique.length + ' structured job posting(s) extracted directly from public job pages. Missing fields are not disclosed by the source.'
+      : 'No structured, evidence-backed job posting could be confirmed from the returned pages. No company or opening has been guessed.',
     jobs: unique,
-    uniqueCompanies: new Set(unique.map((job) => normalizeCompanyName(job.company))).size,
+    uniqueCompanies,
   };
 }
 
