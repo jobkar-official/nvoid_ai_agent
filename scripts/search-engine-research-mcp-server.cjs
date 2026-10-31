@@ -323,7 +323,7 @@ async function searchWeb(args) {
   const pagesPerQuery = Math.min(pageLimit, Math.ceil(limit / 10));
   const configuredMaxRequests = integerEnv('NVOID_WEB_SEARCH_MAX_REQUESTS', 30, 1, 240);
   const hiringSearch = /\\b(hiring|hire|recruit(?:ing|ment)?|job openings?|open positions?|vacanc(?:y|ies)|careers?)\\b/i.test(query);
-  const maxRequests = Math.min(configuredMaxRequests, hiringSearch ? 16 : 30);
+  const maxRequests = Math.min(configuredMaxRequests, hiringSearch ? 12 : 30);
   const requestedPages = Array.from({ length: pagesPerQuery }, (_, page) =>
     queries.map((searchQuery) => ({ query: searchQuery, page: page + 1 })),
   ).flat();
@@ -350,7 +350,7 @@ async function searchWeb(args) {
   const candidates = normalizeOrganic(organic, query).slice(0, limit);
   const crawlEnabled = args.crawlPages !== false;
   const configuredCrawlBudget = integerEnv('NVOID_WEB_CRAWL_MAX_PAGES', 25, 0, 100);
-  const crawlBudget = hiringSearch ? Math.min(configuredCrawlBudget, 20) : configuredCrawlBudget;
+  const crawlBudget = hiringSearch ? Math.min(configuredCrawlBudget, 16) : configuredCrawlBudget;
   const crawlCount = crawlEnabled ? Math.min(crawlBudget, candidates.length) : 0;
   const fetched = await runConcurrent(candidates.slice(0, crawlCount), Math.min(12, Math.max(integerEnv('NVOID_WEB_CRAWL_CONCURRENCY', 6, 1, 12), hiringSearch ? 8 : 6)), async (candidate) => fetchPublicPage(candidate.url));
   const fetchErrors = [];
