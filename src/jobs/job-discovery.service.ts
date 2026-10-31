@@ -162,7 +162,7 @@ export class JobDiscoveryService {
           return { ...(raw as Record<string, unknown>), search_id: searchId };
         });
         const normalizedJobs = rawJobs
-          .map((raw) => normalizeJob(raw, resolveSourceId(entry.server.id, raw), effectiveProfile))
+          .map((raw) => normalizeJob(raw, resolveSourceId(entry.server.id, raw, entry.tool), effectiveProfile))
           .filter((job): job is NormalizedJob => Boolean(job));
         const preparedJobs = normalizedJobs.map((job) => {
           if (entry.server.id === 'remoteok') {
@@ -284,7 +284,7 @@ export class JobDiscoveryService {
     return {
       requestedLimit,
       returnedCount: jobs.length,
-      sourceCount: sourceResults.length,
+      sourceCount: new Set(sourceResults.map((entry) => entry.serverId)).size,
       jobs,
       sources: sourceResults.map((entry) => ({
         serverId: entry.serverId,
@@ -310,7 +310,9 @@ export class JobDiscoveryService {
   private async enrichJobDetails(job: NormalizedJob, serverId: string | undefined, profile: JobProfile): Promise<{ job: NormalizedJob; serverId?: string; fetched: boolean; tool?: string }> {
     if (!serverId) return { job, fetched: false };
     const tools = this.mcpRegistry.getToolCatalog(serverId).flatMap((entry) => entry.tools);
-    const detailTool = tools.find((tool) => isJobDetailTool(tool.name));
+    const detailTool = serverId === 'openings-mcp'
+      ? tools.find((tool) => tool.name.startsWith(job.source + '_') && isJobDetailTool(tool.name))
+      : tools.find((tool) => isJobDetailTool(tool.name));
     if (!detailTool) return { job, serverId, fetched: false };
     const args = buildJobDetailArguments(detailTool.inputSchema, job, profile);
     if (!args) return { job, serverId, fetched: false, tool: detailTool.name };
@@ -552,7 +554,11 @@ function parseSearchReport(result: unknown, serverId: string): SearchSourceRepor
   return { serverId, ...(metadata as Omit<SearchSourceReport, 'serverId'>) };
 }
 
-function resolveSourceId(serverId: string, raw: unknown): string {
+function resolveSourceId(serverId: string, raw: unknown, toolName?: string): string {
+  if (serverId === 'openings-mcp' && toolName) {
+    const provider = /^([a-z0-9]+)_search_jobs$/i.exec(toolName);
+    if (provider) return provider[1].toLowerCase();
+  }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     if (serverId === 'linkedin-mcp-zero') return 'linkedin';
     if (serverId === 'himalayas-mcp') return 'himalayas';
