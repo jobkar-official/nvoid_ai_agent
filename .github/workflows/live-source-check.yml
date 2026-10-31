@@ -19,7 +19,7 @@ permissions:
 jobs:
   live-search:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 25
     services:
       redis:
         image: redis:7-alpine
@@ -45,30 +45,39 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npm run build
+      - run: node --check scripts/remoteok-mcp-server.cjs
       - run: node --check scripts/remoteok-mcp-server.cjs
       - run: node --check scripts/public-job-boards-mcp-server.cjs
       - run: node --check scripts/apify-job-boards-mcp-server.cjs
       - run: node --check scripts/live-source-smoke.mjs
-      - name: Start worker and verify live provider results
+      - name: Build worker image with all configured MCP runtimes
+        run: docker build --tag nvoid-agent:live-check .
+      - name: Start worker image and verify live provider results
         shell: bash
         run: |
           set -euo pipefail
-          NODE_ENV=production npm run start:prod > /tmp/nvoid-live-agent.log 2>&1 &
-          server_pid=$!
+          docker rm --force nvoid-live-agent >/dev/null 2>&1 || true
+          docker run --detach --name nvoid-live-agent --network host \\
+            --env NODE_ENV=production \\
+            --env PORT="$PORT" \\
+            --env AGENT_API_KEY="$AGENT_API_KEY" \\
+            --env MCP_SERVERS_CONFIG=/app/config/mcp-servers.json \\
+            --env REDIS_HOST=127.0.0.1 \\
+            --env REDIS_PORT=6379 \\
+            --env AUTO_SUBMIT_ENABLED=false \\
+            nvoid-agent:live-check
           cleanup() {
-            if kill -0 "$server_pid" 2>/dev/null; then kill "$server_pid" || true; fi
-            wait "$server_pid" 2>/dev/null || true
-            cat /tmp/nvoid-live-agent.log
+            docker logs nvoid-live-agent 2>&1 || true
+            docker rm --force nvoid-live-agent >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
-          for attempt in $(seq 1 60); do
+          for attempt in $(seq 1 90); do
             if curl --silent --show-error --fail http://127.0.0.1:3100/api/health > /tmp/nvoid-live-health.json 2>/dev/null; then
               break
             fi
-            if ! kill -0 "$server_pid" 2>/dev/null; then
-              cat /tmp/nvoid-live-agent.log
+            container_state="$(docker inspect --format='{{.State.Status}}' nvoid-live-agent 2>/dev/null || true)"
+            if [ "$container_state" != "running" ]; then
+              docker logs nvoid-live-agent || true
               exit 1
             fi
             sleep 1

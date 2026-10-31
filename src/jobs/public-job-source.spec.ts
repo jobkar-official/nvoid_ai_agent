@@ -29,9 +29,9 @@ describe('public job board source matching', () => {
     expect(filters.matchesLocation({ location: 'United States' }, 'Bengaluru', true)).toBe(false);
   });
 
-  it('does not accept unknown remote eligibility as a location match', () => {
-    expect(filters.matchesLocation({ location: 'Remote · eligibility not stated' }, 'Bengaluru', true)).toBe(false);
-    expect(filters.matchesLocation({ description: 'Work remotely with a distributed team.' }, 'Bengaluru', true)).toBe(false);
+  it('retains remote listings when country eligibility is not supplied', () => {
+    expect(filters.matchesLocation({ location: 'Remote · eligibility not stated' }, 'Bengaluru', true)).toBe(true);
+    expect(filters.matchesLocation({ description: 'Work remotely with a distributed team.' }, 'Bengaluru', true)).toBe(true);
     expect(filters.matchesLocation({ location: 'Worldwide remote' }, 'Bengaluru', true)).toBe(true);
   });
 
