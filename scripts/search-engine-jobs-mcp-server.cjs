@@ -337,7 +337,11 @@ async function fetchAtsBoard(board) {
   if(!response.ok)throw new Error(board.provider+' board '+board.board+' returned HTTP '+response.status);
   const length=Number(response.headers.get('content-length')||0);
   if(length>5242880)throw new Error('ATS board response exceeded the 5 MB limit');
-  const payload=await response.json();
+  const body=await response.text();
+  if(body.length>5242880)throw new Error('ATS board response exceeded the 5 MB limit');
+  let payload;
+  try{payload=JSON.parse(body);}
+  catch{throw new Error('ATS board returned invalid JSON');}
   const values=board.provider==='lever'?payload:Array.isArray(payload?.jobs)?payload.jobs:[];
   if(!Array.isArray(values))throw new Error('ATS board returned an unexpected response');
   return values.filter(job=>board.provider!=='ashby'||job?.isListed!==false).map(job=>mapAtsJob(board,job)).filter(Boolean);
@@ -414,12 +418,16 @@ async function discover(args,limit) {
   const candidates=[...candidateMap.values()],pageBudget=envInt('SERPER_SEARCH_MAX_PAGE_FETCHES',350,0,500);
   const primaryFetchLimit=Math.min(candidates.length,pageBudget>0?Math.max(1,Math.floor(pageBudget*0.6)):0);
   const crawled=await concurrent(candidates.slice(0,primaryFetchLimit),envInt('SERPER_SEARCH_PAGE_CRAWL_CONCURRENCY',20,1,20),async candidate=>({candidate,page:await crawl(candidate.url)}));
-  const linkedCandidates=new Map();
+  const linkedCandidates=new Map(),discoveredAtsBoards=new Map();
   for(const item of crawled){
     if(!item?.page?.links?.length)continue;
     for(const link of item.page.links){
-      const url=safeUrl(link.url),evidence=[link.text,link.url].join(' ');
-      if(!url||!isJobUrl(url.href,evidence)||!matchesRole(evidence,evidence,role)||candidateMap.has(url.href)||linkedCandidates.has(url.href))continue;
+      const url=safeUrl(link.url);
+      if(!url)continue;
+      const discoveredBoard=atsBoardFromUrl(url.href);
+      if(discoveredBoard)discoveredAtsBoards.set(discoveredBoard.provider+':'+discoveredBoard.board,discoveredBoard);
+      const evidence=[link.text,link.url].join(' ');
+      if(!isJobUrl(url.href,evidence)||!matchesRole(evidence,evidence,role)||candidateMap.has(url.href)||linkedCandidates.has(url.href))continue;
       linkedCandidates.set(url.href,{
         url:url.href,title:clean(link.text)||clean(url.pathname.split('/').filter(Boolean).pop()||''),
         description:clean([item.page.description,item.candidate.description].filter(Boolean).join(' ')),
@@ -429,7 +437,7 @@ async function discover(args,limit) {
     }
   }
   const linkCandidates=[...linkedCandidates.values()],secondarySlots=Math.max(0,pageBudget-crawled.length);
-  const atsBoardMap=new Map();
+  const atsBoardMap=new Map(discoveredAtsBoards);
   for(const candidate of [...candidates,...linkCandidates]){
     const board=atsBoardFromUrl(candidate.url);
     if(board)atsBoardMap.set(board.provider+':'+board.board,board);

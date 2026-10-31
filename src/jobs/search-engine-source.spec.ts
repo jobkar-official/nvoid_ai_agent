@@ -79,6 +79,7 @@ describe('search-engine job crawler', () => {
   it('discovers embedded ATS careers boards from iframe sources', () => {
     const page = crawler.parsePage('<html><body><iframe src="https://jobs.ashbyhq.com/acme"></iframe></body></html>', 'https://acme.example/careers');
     expect(page.links).toContainEqual({ url: 'https://jobs.ashbyhq.com/acme', text: 'Embedded career listings' });
+    expect(crawler.atsBoardFromUrl(page.links[0].url)).toEqual({ provider: 'ashby', board: 'acme' });
   });
   it('separates role families and specific technologies', () => {
     expect(crawler.family('Software Developer')).toBe('software');
