@@ -57,6 +57,24 @@ type ResearchRecord = {
   data: Record<string, unknown>;
 };
 
+type HiringResearchJob = {
+  evidenceId: string;
+  company: string;
+  position: string;
+  location?: string;
+  experience?: string;
+  careerPageUrl?: string;
+  jobUrl: string;
+  postedAt?: string;
+  employmentType?: string;
+};
+
+type HiringResearchResult = {
+  summary: string;
+  jobs: HiringResearchJob[];
+  uniqueCompanies: number;
+};
+
 const MUTATING_TOOL_PATTERN = /(^|[_\s-])(create|update|delete|remove|insert|send|submit|apply|publish|post|purchase|refund|charge|deploy|restart|start|stop|write|mutate|grant|revoke|invite|approve|modify|edit|upload|download|sync|execute)([_\s-]|$)/i;
 const READ_TOOL_PATTERN = /(^|[_\s-])(search|find|list|query|get|fetch|read|lookup|retrieve|describe|report|analytics|metrics|browse|discover|inspect|enumerate|scan|view|show)([_\s-]|$)/i;
 const COLLECTION_KEYS = new Set([
@@ -159,6 +177,31 @@ export class ResearchService {
     if (plans.length === 0) {
       plans = buildHeuristicPlan(query, safeTools, maxRecords, maxTools);
       planner = 'heuristic';
+    }
+
+    const hiringResearchQuery = isHiringResearchQuery(query);
+    if (hiringResearchQuery) {
+      const publicWebSearch = safeTools.find((entry) => entry.serverId === 'serper-research' && entry.tool.name === 'search_web');
+      if (publicWebSearch) {
+        const webArguments = validateArguments({
+          query,
+          queries: buildHiringSearchQueries(query),
+          limit: Math.min(maxRecords, 200),
+          country: 'IN',
+          crawlPages: true,
+        }, publicWebSearch.tool.inputSchema, maxRecords);
+        if (webArguments) {
+          plans = [
+            {
+              serverId: publicWebSearch.serverId,
+              toolName: publicWebSearch.tool.name,
+              arguments: webArguments,
+              reason: 'Focused Google and public-page discovery for current employer job openings.',
+            },
+            ...plans.filter((plan) => !(plan.serverId === publicWebSearch.serverId && plan.toolName === publicWebSearch.tool.name)).slice(0, Math.max(0, maxTools - 1)),
+          ];
+        }
+      }
     }
     if (planningError) warnings.push(planningError);
     if (plans.length === 0 && safeTools.length > 0) {
@@ -263,6 +306,19 @@ export class ResearchService {
     }
 
     const records = [...unique.values()];
+    let hiringResearch: HiringResearchResult | undefined;
+    if (hiringResearchQuery) {
+      try {
+        const structured = await this.ai.structureHiringResearchResults(query, records, Math.min(maxRecords, 100));
+        if (structured) {
+          const uniqueCompanies = new Set(structured.jobs.map((job) => normalizeCompanyName(job.company))).size;
+          hiringResearch = { ...structured, uniqueCompanies };
+        }
+      } catch (error) {
+        this.logger.warn('Hiring research synthesis failed; structured page data will be used: ' + messageOf(error));
+      }
+      if (!hiringResearch) hiringResearch = buildStructuredHiringResults(records, Math.min(maxRecords, 100));
+    }
     const perConnector = statuses.map((status) => {
       const server = connectedCatalog.find((entry) => entry.serverId === status.id);
       const sourceCalls = calls.filter((call) => call.serverId === status.id);
@@ -304,9 +360,86 @@ export class ResearchService {
       },
       calls,
       records,
+      ...(hiringResearch ? { hiringResearch } : {}),
       warnings,
     };
   }
+}
+
+
+function isHiringResearchQuery(query: string): boolean {
+  return /\\b(hiring|hire|recruit(?:ing|ment)?|job openings?|open positions?|vacanc(?:y|ies)|careers?|currently employing)\\b/i.test(query)
+    && /\\b(company|companies|employer|employers|organization|organisations|openings?|positions?|jobs?)\\b/i.test(query);
+}
+
+function buildHiringSearchQueries(query: string): string[] {
+  const roleMatch = query.match(/\\b(?:hiring|hire|recruiting|recruit)\\s+(?:for\\s+)?(.+?)(?=\\s+(?:in|across|throughout|at|and identify|identify|with|including)\\b|[.!?]|$)/i);
+  const role = (roleMatch?.[1] ?? query)
+    .replace(/\\b(currently|companies|company|employers|employer|openings?|positions?|jobs?|in india|across india)\\b/gi, ' ')
+    .replace(/\\s+/g, ' ')
+    .trim()
+    .slice(0, 90) || 'software developer';
+  const canonicalRole = role.replace(/\\bdevelopers\\b/gi, 'developer').replace(/\\bengineers\\b/gi, 'engineer');
+  return [...new Set([
+    '"' + canonicalRole + '" India jobs careers',
+    '"' + canonicalRole + '" India official company careers opening',
+    'site:boards.greenhouse.io "' + canonicalRole + '" India',
+    'site:jobs.lever.co "' + canonicalRole + '" India',
+    'site:jobs.ashbyhq.com "' + canonicalRole + '" India',
+    'site:linkedin.com/jobs/view "' + canonicalRole + '" India',
+    'site:naukri.com/job-listings "' + canonicalRole + '" India',
+  ])].slice(0, 7);
+}
+
+function normalizeCompanyName(value: string): string {
+  return value.toLowerCase().replace(/\\b(private limited|pvt\\.? ltd\\.?|limited|ltd\\.?|incorporated|inc\\.?)\\b/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function asText(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.trim()) return value.replace(/<[^>]*>/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 500);
+  if (typeof value === 'number') return String(value);
+  return undefined;
+}
+
+function buildStructuredHiringResults(records: ResearchRecord[], limit: number): HiringResearchResult | undefined {
+  const jobs: HiringResearchJob[] = [];
+  for (const record of records) {
+    const postings = Array.isArray(record.data.jobPostings) ? record.data.jobPostings : [];
+    for (const value of postings) {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+      const posting = value as Record<string, unknown>;
+      const organization = posting.hiringOrganization && typeof posting.hiringOrganization === 'object'
+        ? posting.hiringOrganization as Record<string, unknown>
+        : {};
+      const company = asText(organization.name ?? posting.company);
+      const position = asText(posting.title ?? posting.name);
+      const jobUrl = asText(posting.url ?? record.url);
+      if (!company || !position || !jobUrl || !/^https?:\\/\\//i.test(jobUrl)) continue;
+      if (typeof posting.validThrough === 'string' && Number.isFinite(Date.parse(posting.validThrough)) && Date.parse(posting.validThrough) < Date.now()) continue;
+      const locations = Array.isArray(posting.locations) ? posting.locations : [];
+      const location = asText(posting.location ?? locations.join(', '));
+      const experience = asText(posting.experienceRequirements ?? posting.qualifications);
+      const careerPageUrl = asText(posting.careerPageUrl);
+      jobs.push({
+        evidenceId: record.id,
+        company,
+        position,
+        ...(location ? { location } : {}),
+        ...(experience ? { experience } : {}),
+        ...(careerPageUrl && /^https?:\\/\\//i.test(careerPageUrl) ? { careerPageUrl } : {}),
+        jobUrl,
+        ...(asText(posting.datePosted) ? { postedAt: asText(posting.datePosted) } : {}),
+        ...(asText(posting.employmentType) ? { employmentType: asText(posting.employmentType) } : {}),
+      });
+    }
+  }
+  const unique = jobs.filter((job, index, all) => all.findIndex((item) => item.jobUrl === job.jobUrl) === index).slice(0, limit);
+  if (unique.length === 0) return undefined;
+  return {
+    summary: unique.length + ' structured job posting(s) extracted directly from public job pages. Missing fields are not disclosed by the source.',
+    jobs: unique,
+    uniqueCompanies: new Set(unique.map((job) => normalizeCompanyName(job.company))).size,
+  };
 }
 
 export function isReadOnlyResearchTool(tool: ResearchTool): boolean {
