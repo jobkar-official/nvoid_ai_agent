@@ -27,6 +27,7 @@ export interface SearchResult {
     detailsRequested?: number;
     detailsFetched?: number;
     detailTool?: string;
+    skipReason?: string;
   }>;
   searchReport: SearchSourceReport[];
   backendSync: { synced: boolean; reason?: string };
@@ -45,7 +46,8 @@ type JobSourceResult = {
   normalizedCount: number;
   roleMatchedCount: number;
   locationMatchedCount: number;
-  connectionStatus: 'searched' | 'search-error' | 'disconnected' | 'no-search-tool';
+  skipReason?: string;
+  connectionStatus: 'searched' | 'search-error' | 'disconnected' | 'no-search-tool' | 'skipped';
 };
 
 export interface SearchSourceReport {
@@ -124,12 +126,12 @@ export class JobDiscoveryService {
             serverId: entry.server.id,
             tool: entry.tool,
             jobs: [],
-            error: 'Could not safely infer the required arguments. Define jobSearch.tool and jobSearch.arguments in mcp-servers.json.',
+            skipReason: 'The provider requires a search filter that does not support the current profile location or preferences.',
             fetchedCount: 0,
             normalizedCount: 0,
             roleMatchedCount: 0,
             locationMatchedCount: 0,
-            connectionStatus: 'search-error',
+            connectionStatus: 'skipped',
           };
         }
 
@@ -316,6 +318,7 @@ export class JobDiscoveryService {
         detailsRequested: entry.detailsRequested,
         detailsFetched: entry.detailsFetched,
         detailTool: entry.detailTool,
+        skipReason: entry.skipReason,
       })),
       searchReport: sourceResults.flatMap((entry) => entry.report ? [entry.report] : []),
       backendSync,
@@ -601,9 +604,178 @@ function resolveSourceId(serverId: string, raw: unknown, toolName?: string): str
   return serverId;
 }
 
+type InputSchemaProperty = {
+  type?: string;
+  description?: string;
+  enum?: unknown[];
+  pattern?: string;
+  items?: {
+    type?: string;
+    enum?: unknown[];
+    pattern?: string;
+  };
+};
+
+type InputSchema = {
+  properties?: Record<string, InputSchemaProperty>;
+  required?: string[];
+};
+
+type CountryCode = {
+  alpha2: string;
+  alpha3: string;
+  names: string[];
+};
+
+const COUNTRY_CODES: CountryCode[] = [
+  { alpha2: 'in', alpha3: 'IND', names: ['india', 'bengaluru', 'bangalore', 'delhi', 'noida', 'gurugram', 'gurgaon', 'mumbai', 'hyderabad', 'chennai', 'pune', 'kolkata'] },
+  { alpha2: 'us', alpha3: 'USA', names: ['united states', 'usa', 'america', 'new york', 'san francisco', 'california', 'texas', 'seattle', 'boston', 'chicago', 'austin', 'los angeles'] },
+  { alpha2: 'gb', alpha3: 'GBR', names: ['united kingdom', 'uk', 'great britain', 'england', 'scotland', 'wales', 'london', 'manchester'] },
+  { alpha2: 'de', alpha3: 'DEU', names: ['germany', 'berlin', 'munich', 'frankfurt', 'hamburg'] },
+  { alpha2: 'ca', alpha3: 'CAN', names: ['canada', 'toronto', 'vancouver', 'montreal', 'calgary', 'ottawa'] },
+  { alpha2: 'au', alpha3: 'AUS', names: ['australia', 'sydney', 'melbourne', 'perth', 'brisbane'] },
+  { alpha2: 'sg', alpha3: 'SGP', names: ['singapore'] },
+  { alpha2: 'jp', alpha3: 'JPN', names: ['japan', 'tokyo', 'osaka', 'yokohama'] },
+  { alpha2: 'fr', alpha3: 'FRA', names: ['france', 'paris', 'lyon'] },
+  { alpha2: 'nl', alpha3: 'NLD', names: ['netherlands', 'amsterdam', 'rotterdam'] },
+  { alpha2: 'ie', alpha3: 'IRL', names: ['ireland', 'dublin', 'cork'] },
+  { alpha2: 'nz', alpha3: 'NZL', names: ['new zealand', 'auckland', 'wellington'] },
+  { alpha2: 'ae', alpha3: 'ARE', names: ['united arab emirates', 'uae', 'dubai', 'abu dhabi'] },
+  { alpha2: 'pk', alpha3: 'PAK', names: ['pakistan', 'karachi', 'lahore', 'islamabad'] },
+  { alpha2: 'bd', alpha3: 'BGD', names: ['bangladesh', 'dhaka'] },
+  { alpha2: 'za', alpha3: 'ZAF', names: ['south africa', 'johannesburg', 'cape town'] },
+  { alpha2: 'br', alpha3: 'BRA', names: ['brazil', 'sao paulo', 'rio de janeiro'] },
+  { alpha2: 'es', alpha3: 'ESP', names: ['spain', 'madrid', 'barcelona'] },
+  { alpha2: 'it', alpha3: 'ITA', names: ['italy', 'rome', 'milan'] },
+  { alpha2: 'ch', alpha3: 'CHE', names: ['switzerland', 'zurich', 'geneva'] },
+  { alpha2: 'se', alpha3: 'SWE', names: ['sweden', 'stockholm'] },
+  { alpha2: 'no', alpha3: 'NOR', names: ['norway', 'oslo'] },
+  { alpha2: 'dk', alpha3: 'DNK', names: ['denmark', 'copenhagen'] },
+  { alpha2: 'pl', alpha3: 'POL', names: ['poland', 'warsaw', 'krakow'] },
+  { alpha2: 'my', alpha3: 'MYS', names: ['malaysia', 'kuala lumpur'] },
+  { alpha2: 'ph', alpha3: 'PHL', names: ['philippines', 'manila'] },
+  { alpha2: 'id', alpha3: 'IDN', names: ['indonesia', 'jakarta'] },
+  { alpha2: 'th', alpha3: 'THA', names: ['thailand', 'bangkok'] },
+  { alpha2: 'vn', alpha3: 'VNM', names: ['vietnam', 'hanoi', 'ho chi minh'] },
+  { alpha2: 'hk', alpha3: 'HKG', names: ['hong kong'] },
+];
+
+function normalizeSchemaToken(value: unknown): string {
+  return String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function profileCountries(profile: JobProfile): CountryCode[] {
+  const text = normalizeSchemaToken([
+    /^(worldwide|global|anywhere|all countries|all locations)$/i.test(profile.location ?? '') ? '' : profile.location,
+    ...(profile.countries ?? []).filter((country) => !/^(worldwide|global|anywhere|all countries|all locations)$/i.test(country)),
+  ].filter(Boolean).join(' '));
+  return COUNTRY_CODES.filter((country) => country.names.some((name) => text.includes(normalizeSchemaToken(name))));
+}
+
+function isAlpha2CountryProperty(metadata: InputSchemaProperty): boolean {
+  return /alpha[- ]?2|two[- ]letter|two letter/i.test(metadata.description ?? '')
+    || /\{2\}/.test(metadata.pattern ?? '');
+}
+
+function isAlpha3CountryProperty(metadata: InputSchemaProperty): boolean {
+  return /alpha[- ]?3|three[- ]letter|three letter/i.test(metadata.description ?? '')
+    || /\{3\}/.test(metadata.pattern ?? '');
+}
+
+function resolveEnumOption(candidate: string, options: unknown[], propertyName: string, description: string): string | undefined {
+  const normalized = normalizeSchemaToken(candidate);
+  const direct = options.find((option) => typeof option === 'string' && normalizeSchemaToken(option) === normalized);
+  if (typeof direct === 'string') return direct;
+
+  const field = propertyName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const employmentFilter = /^(jobtype|employmenttype|employmenttypes|scheduletype)$/.test(field)
+    && !/(job level|seniority|career level|experience level)/i.test(description);
+  if (!employmentFilter) return undefined;
+
+  const employmentAliases: Record<string, string[]> = {
+    fulltime: ['fulltime', 'regular'],
+    parttime: ['parttime'],
+    contract: ['contract'],
+    internship: ['internship', 'intern'],
+    intern: ['intern', 'internship'],
+    temporary: ['temporary'],
+    freelance: ['freelance'],
+    volunteer: ['volunteer'],
+    fellowship: ['fellowship'],
+  };
+  const accepted = new Set(employmentAliases[normalized] ?? [normalized]);
+  const option = options.find((item) => typeof item === 'string' && accepted.has(normalizeSchemaToken(item)));
+  return typeof option === 'string' ? option : undefined;
+}
+
+function resolveLocationEnum(options: unknown[], profile: JobProfile, propertyName: string): string | undefined {
+  const locationIsGlobal = /^(worldwide|global|anywhere|all countries|all locations)$/i.test(profile.location ?? '');
+  const candidates = [
+    ...(locationIsGlobal ? [] : [profile.location ?? '']),
+    ...(profile.countries ?? []).filter((country) => !/^(worldwide|global|anywhere|all countries|all locations)$/i.test(country)),
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    const match = options.find((option) => typeof option === 'string'
+      && normalizeSchemaToken(option) === normalizeSchemaToken(candidate));
+    if (typeof match === 'string') return match;
+    const suffixMatch = options.find((option) => typeof option === 'string'
+      && normalizeSchemaToken(option).endsWith(normalizeSchemaToken(candidate))
+      && normalizeSchemaToken(candidate).length >= 4);
+    if (typeof suffixMatch === 'string') return suffixMatch;
+  }
+  const countries = profileCountries(profile);
+  const normalizedProperty = propertyName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (normalizedProperty === 'area' && countries.some((country) => country.alpha2 === 'in')) {
+    const otherAsia = options.find((option) => typeof option === 'string' && normalizeSchemaToken(option) === 'otherasia');
+    if (typeof otherAsia === 'string') return otherAsia;
+  }
+  return undefined;
+}
+
+function schemaCompatibleValue(
+  value: unknown,
+  metadata: InputSchemaProperty,
+  propertyName: string,
+  profile: JobProfile,
+): unknown {
+  if (value === undefined || value === null) return undefined;
+  const options = metadata.enum ?? metadata.items?.enum;
+  const itemPattern = metadata.items?.pattern;
+  if (metadata.type === 'array' || Array.isArray(value)) {
+    const values = Array.isArray(value) ? value : [value];
+    let accepted = values;
+    if (options?.length) {
+      accepted = values.map((item) => resolveEnumOption(String(item), options, propertyName, metadata.description ?? '')).filter((item): item is string => Boolean(item));
+    } else if (itemPattern) {
+      let pattern: RegExp;
+      try { pattern = new RegExp(itemPattern); } catch { return undefined; }
+      accepted = values.filter((item) => pattern.test(String(item)));
+    }
+    return accepted.length > 0 ? accepted : undefined;
+  }
+
+  if (metadata.type === 'string' && Array.isArray(value)) value = value.join(', ');
+  if (typeof value === 'string' && options?.length) {
+    const match = resolveEnumOption(value, options, propertyName, metadata.description ?? '');
+    return match;
+  }
+  if (typeof value === 'string' && metadata.pattern) {
+    let pattern: RegExp;
+    try { pattern = new RegExp(metadata.pattern); } catch { return undefined; }
+    if (!pattern.test(value)) return undefined;
+  }
+  if (metadata.type === 'integer' && typeof value === 'number' && !Number.isInteger(value)) return Math.floor(value);
+  if (metadata.type === 'number' && typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  if (metadata.type === 'boolean' && typeof value !== 'boolean') return undefined;
+  return value;
+}
+
 export function inferArguments(schemaValue: unknown, profile: JobProfile, limit: number): Record<string, unknown> | undefined {
   if (!schemaValue || typeof schemaValue !== 'object') return undefined;
-  const schema = schemaValue as { properties?: Record<string, { type?: string; description?: string; enum?: unknown[] }>; required?: string[] };
+  const schema = schemaValue as InputSchema;
   const properties = schema.properties ?? {};
   if (Object.keys(properties).length === 0) return undefined;
   const result: Record<string, unknown> = {};
@@ -611,23 +783,69 @@ export function inferArguments(schemaValue: unknown, profile: JobProfile, limit:
 
   for (const [name, metadata] of Object.entries(properties)) {
     const compact = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const description = metadata.description ?? '';
     let value: unknown;
-    if (/^(q|kw|query|querytext|keyword|keywords|search|searchtext|searchterm|searchquery|term|jobtitle|title|position|role|job|jobname)$/.test(compact)) value = /s$/.test(compact) && metadata.type === 'array' ? [profile.jobTitle, ...(profile.keywords ?? [])] : [profile.jobTitle, ...(profile.keywords ?? [])].filter(Boolean).join(' ');
-    else if (/^(loc|location|locationname|city|cityname|region|geo|geography|place|joblocation|preferredlocation)$/.test(compact)) value = profile.location ?? profile.countries?.join(', ');
-    else if (compact === 'countries') value = metadata.type === 'array' ? profile.countries : profile.countries?.join(', ');
-    else if (/^(country|countryname|countrycode)$/.test(compact)) value = inferCountry(profile) ?? profile.countries?.[0];
-    else if (/^(skills|skill|technologies|techstack)$/.test(compact)) value = metadata.type === 'array' ? profile.skills : profile.skills?.join(', ');
-    else if (/^(experience|experienceyears|minexperience|yearsofexperience|experiencelevel)$/.test(compact)) value = profile.experienceYears;
-    else if (/^(salarymin|minsalary|minimumsalary|salaryfrom)$/.test(compact)) value = profile.salaryMin;
-    else if (/^(salarymax|maxsalary|maximumsalary|salaryto)$/.test(compact)) value = profile.salaryMax;
-    else if (/^(currency|salarycurrency)$/.test(compact)) value = profile.salaryCurrency;
-    else if (/^(remote|remoteonly|isremote)$/.test(compact)) value = profile.remote;
-    else if (compact === 'worldwide') value = /^(worldwide|global|anywhere|all countries|all locations)$/i.test(profile.location ?? '');
-    else if (compact === 'page') value = 1;
-    else if (/^(limit|count|pageSize|maxresults|maxrows|numresults|resultlimit|perpage|pagesize|take)$/.test(compact)) value = limit;
-    else if (/^(jobtype|employmenttype|employmenttypes)$/.test(compact)) value = metadata.type === 'array' ? profile.employmentTypes : profile.employmentTypes?.join(', ');
-    else if (/^(userId|userid)$/.test(compact)) value = profile.userId;
-    if (value !== undefined) result[name] = value;
+    if (/^(q|kw|query|querytext|keyword|keywords|search|searchtext|searchterm|searchquery|term|jobtitle|title|position|role|job|jobname)$/.test(compact)) {
+      value = /s$/.test(compact) && metadata.type === 'array'
+        ? [profile.jobTitle, ...(profile.keywords ?? [])]
+        : [profile.jobTitle, ...(profile.keywords ?? [])].filter(Boolean).join(' ');
+    } else if (/^(loc|location|locationname|city|cityname|geo|geography|place|joblocation|preferredlocation)$/.test(compact)) {
+      const country = inferCountry(profile);
+      const isCityField = /^(city|cityname)$/.test(compact);
+      const requestedLocation = profile.location ?? profile.countries?.join(', ');
+      value = isCityField
+        ? requestedLocation?.split(',')[0]?.trim()
+        : requestedLocation;
+      if (metadata.enum?.length) value = resolveLocationEnum(metadata.enum, profile, name);
+      if (metadata.type === 'string' && isAlpha2CountryProperty(metadata) && country) value = profileCountries(profile)[0]?.alpha2;
+    } else if (compact === 'area') {
+      value = metadata.enum?.length ? resolveLocationEnum(metadata.enum, profile, name) : undefined;
+    } else if (compact === 'countries') {
+      const countries = profileCountries(profile);
+      if (isAlpha3CountryProperty(metadata)) {
+        value = countries.length === 1 ? [countries[0].alpha3] : undefined;
+      } else if (isAlpha2CountryProperty(metadata) || /alpha[- ]?2/i.test(description)) {
+        value = countries.length ? countries.map((country) => country.alpha2).join(',') : undefined;
+      } else {
+        value = metadata.type === 'array' ? profile.countries : profile.countries?.join(', ');
+      }
+    } else if (/^(country|countryname|countrycode)$/.test(compact)) {
+      const country = inferCountry(profile);
+      const countries = profileCountries(profile);
+      if (isAlpha3CountryProperty(metadata)) value = countries.length === 1 ? countries[0].alpha3 : undefined;
+      else if (isAlpha2CountryProperty(metadata)) value = countries.length === 1 ? countries[0].alpha2 : undefined;
+      else value = country ?? (countries.length === 1 ? profile.countries?.[0] ?? country : undefined);
+    } else if (/^(skills|skill|technologies|techstack)$/.test(compact)) {
+      value = metadata.type === 'array' ? profile.skills : profile.skills?.join(', ');
+    } else if (/^(experience|experienceyears|minexperience|yearsofexperience|experiencelevel)$/.test(compact)) {
+      value = profile.experienceYears;
+    } else if (/^(salarymin|minsalary|minimumsalary|salaryfrom)$/.test(compact)) {
+      value = profile.salaryMin;
+    } else if (/^(salarymax|maxsalary|maximumsalary|salaryto)$/.test(compact)) {
+      value = profile.salaryMax;
+    } else if (/^(currency|salarycurrency)$/.test(compact)) {
+      value = profile.salaryCurrency;
+    } else if (/^(remote|remoteonly|isremote)$/.test(compact)) {
+      value = metadata.type === 'boolean' ? profile.remote : profile.remote ? 'Remote' : undefined;
+    } else if (/^(workplace|workplacetype)$/.test(compact)) {
+      value = profile.remote ? 'Remote' : undefined;
+    } else if (/^(jobtype|employmenttype|employmenttypes|scheduletype)$/.test(compact)) {
+      if (!/(job level|seniority|career level|experience level)/i.test(description)) {
+        value = metadata.type === 'array' ? profile.employmentTypes : profile.employmentTypes?.[0];
+        if (compact === 'scheduletype' && typeof value === 'string') {
+          value = value.replace(/\bfull[-_ ]?time\b/i, 'Full-Time').replace(/\bpart[-_ ]?time\b/i, 'Part-Time');
+        }
+      }
+    } else if (/^(limit|count|n|resultsWanted|pageSize|maxresults|maxrows|numresults|resultlimit|perpage|pagesize|take)$/.test(compact)) {
+      value = limit;
+    } else if (/^(page|start|offset)$/.test(compact)) {
+      value = compact === 'page' ? 1 : 0;
+    } else if (/^(userId|userid)$/.test(compact)) {
+      value = profile.userId;
+    }
+
+    const compatible = schemaCompatibleValue(value, metadata, name, profile);
+    if (compatible !== undefined) result[name] = compatible;
     else if ((schema.required ?? []).includes(name)) missing.push(name);
   }
 
