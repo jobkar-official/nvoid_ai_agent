@@ -195,8 +195,16 @@ export class AiAgentService {
     ], 0, true, 15000);
     const parsed = JSON.parse(output) as { summary?: unknown; jobs?: unknown };
     if (!Array.isArray(parsed.jobs)) return undefined;
-    const evidenceById = new Map(evidence.map((item) => [item.id, new Set(item.urls)]));
+    const normalizeEvidenceText = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\\s+/g, ' ').trim();
+    const evidenceById = new Map(evidence.map((item) => [
+      item.id,
+      { urls: new Set(item.urls), searchableText: normalizeEvidenceText(JSON.stringify(item)) },
+    ]));
     const allEvidenceUrls = new Set(evidence.flatMap((item) => item.urls));
+    const isSupportedByEvidence = (phrase: string, searchableText: string): boolean => {
+      const tokens = normalizeEvidenceText(phrase).split(' ').filter((token) => token.length > 1);
+      return tokens.length > 0 && tokens.filter((token) => searchableText.includes(token)).length >= Math.ceil(tokens.length * 0.5);
+    };
     const normalizeEvidenceUrl = (value: unknown): string | undefined => {
       if (typeof value !== 'string') return undefined;
       try {
@@ -214,7 +222,11 @@ export class AiAgentService {
       if (typeof item.evidenceId !== 'string' || typeof item.company !== 'string' || typeof item.position !== 'string') return [];
       const allowed = evidenceById.get(item.evidenceId);
       const jobUrl = normalizeEvidenceUrl(item.jobUrl);
-      if (!allowed || !jobUrl || ![...allowed].some((url) => normalizeEvidenceUrl(url) === jobUrl)) return [];
+      if (!allowed
+        || !jobUrl
+        || ![...allowed.urls].some((url) => normalizeEvidenceUrl(url) === jobUrl)
+        || !isSupportedByEvidence(item.company, allowed.searchableText)
+        || !isSupportedByEvidence(item.position, allowed.searchableText)) return [];
       const careerPageUrl = normalizeEvidenceUrl(item.careerPageUrl);
       const safeOptional = (key: string, max = 240): string | undefined => (
         typeof item[key] === 'string' && (item[key] as string).trim()
