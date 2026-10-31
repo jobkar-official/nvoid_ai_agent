@@ -84,6 +84,91 @@ function htmlText(html) {
     .trim();
 }
 
+function flattenJsonLd(value, output = []) {
+  if (Array.isArray(value)) {
+    for (const item of value) flattenJsonLd(item, output);
+    return output;
+  }
+  if (!value || typeof value !== 'object') return output;
+  const record = value;
+  output.push(record);
+  if (Array.isArray(record['@graph'])) flattenJsonLd(record['@graph'], output);
+  return output;
+}
+
+function parseJobPostings(html, pageUrl) {
+  const nodes = [];
+  const scripts = String(html || '').matchAll(/<script[^>]+type=["']application\\/ld\\+json["'][^>]*>([\\s\\S]*?)<\\/script>/gi);
+  for (const match of scripts) {
+    try {
+      nodes.push(...flattenJsonLd(JSON.parse(match[1])));
+    } catch {
+      continue;
+    }
+  }
+  const cleanField = (value, max = 1600) => {
+    if (typeof value !== 'string') return '';
+    return htmlText(value).slice(0, max);
+  };
+  const locationsFrom = (value) => {
+    const locations = Array.isArray(value) ? value : value ? [value] : [];
+    return locations.map((item) => {
+      if (!item || typeof item !== 'object') return '';
+      const address = item.address && typeof item.address === 'object' ? item.address : item;
+      return [address.addressLocality, address.addressRegion, address.addressCountry]
+        .map((part) => typeof part === 'string' ? part : part?.name || '')
+        .filter(Boolean).join(', ');
+    }).filter(Boolean).slice(0, 8);
+  };
+  return nodes.flatMap((node) => {
+    const types = Array.isArray(node['@type']) ? node['@type'] : [node['@type']];
+    if (!types.some((type) => String(type || '').toLowerCase() === 'jobposting')) return [];
+    const organization = node.hiringOrganization && typeof node.hiringOrganization === 'object'
+      ? node.hiringOrganization : {};
+    const mainEntity = node.mainEntityOfPage;
+    const url = typeof node.url === 'string' ? node.url
+      : typeof mainEntity === 'string' ? mainEntity
+        : mainEntity && typeof mainEntity === 'object' && typeof mainEntity['@id'] === 'string' ? mainEntity['@id'] : pageUrl;
+    const location = locationsFrom(node.jobLocation);
+    const experience = cleanField(node.experienceRequirements || node.experienceInPlaceOfEducation || node.qualifications, 800);
+    const validThrough = cleanField(node.validThrough, 80);
+    if (!cleanField(node.title || node.name, 220) || !cleanField(organization.name, 180)) return [];
+    return [{
+      title: cleanField(node.title || node.name, 220),
+      company: cleanField(organization.name, 180),
+      hiringOrganization: { name: cleanField(organization.name, 180) },
+      ...(location.length ? { location: location.join(' · '), locations: location } : {}),
+      ...(experience ? { experienceRequirements: experience } : {}),
+      ...(cleanField(node.description, 5000) ? { description: cleanField(node.description, 5000) } : {}),
+      ...(cleanField(node.datePosted, 80) ? { datePosted: cleanField(node.datePosted, 80) } : {}),
+      ...(validThrough ? { validThrough } : {}),
+      ...(cleanField(node.employmentType, 100) ? { employmentType: cleanField(node.employmentType, 100) } : {}),
+      url: (() => { try { return new URL(url, pageUrl).href; } catch { return pageUrl; } })(),
+    }];
+  }).slice(0, 30);
+}
+
+function extractCareerPageLinks(html, pageUrl) {
+  const base = new URL(pageUrl);
+  const links = new Set();
+  const anchors = String(html || '').matchAll(/<a\\b[^>]*href=["']([^"'#]+)["'][^>]*>([\\s\\S]*?)<\\/a>/gi);
+  for (const match of anchors) {
+    const href = decodeHtml(match[1]).trim();
+    const label = htmlText(match[2]).slice(0, 180);
+    if (!/career|jobs?|openings?|vacanc|join our team|work with us/i.test(href + ' ' + label)) continue;
+    try {
+      const url = new URL(href, base);
+      if (!['http:', 'https:'].includes(url.protocol) || url.hostname.toLowerCase() !== base.hostname.toLowerCase()) continue;
+      url.hash = '';
+      links.add(url.href);
+    } catch {
+      continue;
+    }
+    if (links.size >= 12) break;
+  }
+  return [...links];
+}
+
 function extractPage(html, url) {
   const title = decodeHtml(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '').replace(/<[^>]*>/g, '').trim();
   const descriptionMatch = html.match(/<meta[^>]+(?:name|property)=["'](?:description|og:description)["'][^>]+content=["']([^"']*)["']/i)
@@ -92,10 +177,14 @@ function extractPage(html, url) {
     || html.match(/<link[^>]+href=["']([^"']+)["'][^>]+rel=["'][^"']*canonical[^"']*["']/i);
   const canonical = canonicalMatch?.[1] ? new URL(decodeHtml(canonicalMatch[1]), url).href : url;
   const text = htmlText(html);
+  const jobPostings = parseJobPostings(html, canonical);
+  const careerPageLinks = extractCareerPageLinks(html, canonical);
   return {
     pageTitle: title.slice(0, 500),
     pageDescription: decodeHtml(descriptionMatch?.[1] || '').slice(0, 1500),
     canonicalUrl: canonical,
+    ...(jobPostings.length ? { jobPostings } : {}),
+    ...(careerPageLinks.length ? { careerPageLinks } : {}),
     pageText: text.slice(0, 12000),
     pageTextTruncated: text.length > 12000,
   };
@@ -131,7 +220,7 @@ async function fetchPublicPage(rawUrl) {
     const response = await fetch(current, {
       redirect: 'manual',
       headers: { accept: 'text/html,application/xhtml+xml,text/plain;q=0.8,*/*;q=0.3', 'user-agent': USER_AGENT },
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(9000),
     });
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const next = response.headers.get('location');
@@ -232,7 +321,9 @@ async function searchWeb(args) {
   ])].slice(0, 8);
   const pageLimit = integerEnv('NVOID_WEB_SEARCH_MAX_PAGES', 10, 1, 30);
   const pagesPerQuery = Math.min(pageLimit, Math.ceil(limit / 10));
-  const maxRequests = integerEnv('NVOID_WEB_SEARCH_MAX_REQUESTS', 30, 1, 240);
+  const configuredMaxRequests = integerEnv('NVOID_WEB_SEARCH_MAX_REQUESTS', 30, 1, 240);
+  const hiringSearch = /\\b(hiring|hire|recruit(?:ing|ment)?|job openings?|open positions?|vacanc(?:y|ies)|careers?)\\b/i.test(query);
+  const maxRequests = Math.min(configuredMaxRequests, hiringSearch ? 16 : 30);
   const requestedPages = Array.from({ length: pagesPerQuery }, (_, page) =>
     queries.map((searchQuery) => ({ query: searchQuery, page: page + 1 })),
   ).flat();
@@ -244,7 +335,7 @@ async function searchWeb(args) {
         method: 'POST',
         headers: { accept: 'application/json', 'content-type': 'application/json', 'X-API-KEY': apiKey, 'user-agent': USER_AGENT },
         body: JSON.stringify({ q: request.query, gl: country, hl: 'en', num: 10, page: request.page }),
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(12000),
       });
       if (!response.ok) return { ...request, error: 'Serper returned HTTP ' + response.status + '. Check the API key, credits and rate limits.' };
       return { ...request, data: await response.json() };
@@ -258,9 +349,10 @@ async function searchWeb(args) {
     : []);
   const candidates = normalizeOrganic(organic, query).slice(0, limit);
   const crawlEnabled = args.crawlPages !== false;
-  const crawlBudget = integerEnv('NVOID_WEB_CRAWL_MAX_PAGES', 25, 0, 100);
+  const configuredCrawlBudget = integerEnv('NVOID_WEB_CRAWL_MAX_PAGES', 25, 0, 100);
+  const crawlBudget = hiringSearch ? Math.min(configuredCrawlBudget, 20) : configuredCrawlBudget;
   const crawlCount = crawlEnabled ? Math.min(crawlBudget, candidates.length) : 0;
-  const fetched = await runConcurrent(candidates.slice(0, crawlCount), integerEnv('NVOID_WEB_CRAWL_CONCURRENCY', 6, 1, 12), async (candidate) => fetchPublicPage(candidate.url));
+  const fetched = await runConcurrent(candidates.slice(0, crawlCount), Math.min(12, Math.max(integerEnv('NVOID_WEB_CRAWL_CONCURRENCY', 6, 1, 12), hiringSearch ? 8 : 6)), async (candidate) => fetchPublicPage(candidate.url));
   const fetchErrors = [];
   let pagesFetched = 0;
   const records = candidates.map((candidate, index) => {
