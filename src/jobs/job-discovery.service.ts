@@ -72,13 +72,20 @@ export class JobDiscoveryService {
   ) {}
 
   getSearchSources() {
-    const searchable = new Map(this.mcpRegistry.getJobSearchServers().map((entry) => [entry.server.id, entry]));
+    const searchable = new Map<string, Array<{ tool: string; configured: boolean }>>();
+    for (const entry of this.mcpRegistry.getJobSearchServers()) {
+      const entries = searchable.get(entry.server.id) ?? [];
+      entries.push({ tool: entry.tool, configured: entry.configured });
+      searchable.set(entry.server.id, entries);
+    }
     return this.mcpRegistry.getStatuses().map((status) => {
-      const jobSource = searchable.get(status.id);
+      const jobSources = searchable.get(status.id) ?? [];
+      const preferred = jobSources.find((entry) => entry.configured) ?? jobSources[0];
       return {
         ...status,
-        jobSearchAvailable: Boolean(jobSource),
-        searchTool: jobSource?.tool,
+        jobSearchAvailable: jobSources.length > 0,
+        searchTool: preferred?.tool,
+        searchTools: jobSources.map((entry) => entry.tool),
       };
     });
   }
