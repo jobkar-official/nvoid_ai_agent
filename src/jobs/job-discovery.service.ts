@@ -720,7 +720,12 @@ function resolveLocationEnum(options: unknown[], profile: JobProfile, propertyNa
   const locationIsGlobal = /^(worldwide|global|anywhere|all countries|all locations)$/i.test(profile.location ?? '');
   const countries = profileCountries(profile);
   const normalizedProperty = propertyName.toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (normalizedProperty === 'area' && countries.some((country) => country.alpha2 === 'in')) {
+  if (
+    normalizedProperty === 'area'
+    && (!locationIsGlobal || countries.length === 1)
+    && countries.length === 1
+    && countries[0].alpha2 === 'in'
+  ) {
     const otherAsia = options.find((option) => typeof option === 'string' && normalizeSchemaToken(option) === 'otherasia');
     if (typeof otherAsia === 'string') return otherAsia;
   }

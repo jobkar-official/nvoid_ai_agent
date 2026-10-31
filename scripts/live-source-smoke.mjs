@@ -79,8 +79,8 @@ if (jobs.length === 0) throw new Error('All live sources responded but the combi
 const liveSourceIds = [
   'jobicy', 'remoteok', 'arbeitnow', 'workingnomads', 'himalayas', 'remotive', 'weworkremotely',
   '104', 'amazon', 'apple', 'cake', 'freehire', 'flowxtra', 'google', 'indeed', 'jobindex',
-  'linkedin', 'meta', 'mynavi', 'tsmc', 'jobspy', 'naukri', 'glassdoor', 'ziprecruiter',
-  'bdjobs', 'bayt', 'hellowork',
+  'linkedin', 'meta', 'mynavi', 'tsmc', 'jobspy', 'aidevboard', 'jobdatalake', 'apna',
+  'apify-boards', 'naukri', 'glassdoor', 'ziprecruiter', 'bdjobs', 'bayt', 'hellowork',
 ];
 const invalid = jobs.filter((job) => !liveSourceIds.includes(job.source) || !/^https?:\/\//i.test(job.jobUrl || ''));
 if (invalid.length) throw new Error('Search returned a non-live source or a listing without an external URL: ' + JSON.stringify(invalid.slice(0, 2)));
@@ -92,7 +92,8 @@ if (offRoleSeniority.length) {
 console.log('LIVE SOURCE CHECK PASSED');
 console.log('Connected sources: ' + health.mcp.connected + '/' + health.mcp.configured);
 for (const source of sources) {
-  console.log(source.serverId + ': ' + source.found + ' current listing(s)');
+  console.log(source.serverId + (source.tool ? '/' + source.tool : '') + ': ' + source.found + ' current listing(s)'
+    + (source.connectionStatus === 'skipped' ? ' (skipped for this profile)' : ''));
 }
 console.log('Combined results: ' + jobs.length);
 for (const job of jobs.slice(0, 10)) {
