@@ -312,7 +312,7 @@ export class ResearchService {
       if (this.ai.isEnabled()) {
         try {
           const structured = await this.ai.structureHiringResearchResults(query, records, Math.min(maxRecords, 100));
-          if (structured) {
+          if (structured?.jobs.length) {
             const uniqueCompanies = new Set(structured.jobs.map((job) => normalizeCompanyName(job.company))).size;
             hiringResearch = {
               ...structured,
