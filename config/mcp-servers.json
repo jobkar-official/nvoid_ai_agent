@@ -6,12 +6,12 @@
     "transport": "http",
     "url": "https://jobicy.com/mcp",
     "jobSearch": {
-      "tool": "get_jobs",
+      "tool": "search_jobs",
       "arguments": {
-        "tag": {
+        "query": {
           "$profile": "jobTitle"
         },
-        "count": {
+        "limit": {
           "$context": "limit"
         }
       }
@@ -747,7 +747,8 @@
         "keyword": {
           "$profile": "jobTitle"
         },
-        "page": 1
+        "page": 1,
+        "sort": "recent"
       }
     }
   },
@@ -766,9 +767,7 @@
         "location": {
           "$profile": "location"
         },
-        "limit": {
-          "$context": "limit"
-        }
+        "limit": 50
       }
     }
   },
@@ -822,18 +821,16 @@
     "jobSearch": {
       "tool": "search_jobs",
       "arguments": {
-        "query": {
+        "q": {
           "$profile": "jobTitle"
         },
         "location": {
           "$profile": "location"
         },
-        "skills": {
-          "$profile": "skills"
-        },
-        "posted_within": "30d",
+        "skills": "{{profile.skills}}",
         "sort_by": "posted_at:desc",
-        "limit": 50
+        "per_page": 50,
+        "page": 1
       }
     }
   }
