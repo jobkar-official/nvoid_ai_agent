@@ -38,6 +38,7 @@ jobs:
       - run: node --check scripts/search-engine-research-mcp-server.cjs
       - run: node --check scripts/apify-job-boards-mcp-server.cjs
       - run: node --check scripts/smoke-test.mjs
+      - run: node --check scripts/mcp-live-smoke-test.mjs
       - run: npm run lint:types
       - run: npm test -- --coverage
       - run: npm run build

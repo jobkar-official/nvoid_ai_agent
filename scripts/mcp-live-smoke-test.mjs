@@ -213,7 +213,7 @@ for (const server of credentialDisabledConfigs) {
     enabled: false,
     skipped: true,
     reason: 'Disabled in MCP config; required credentials are not configured.',
-  }) + '\\n');
+  }) + '\n');
 }
 for (const server of configs.filter(item => item.enabled)) {
   const row = { server: server.id, connected: false, tools: 0, searched: 0, jobs: 0, details: 0, errors: [] };
