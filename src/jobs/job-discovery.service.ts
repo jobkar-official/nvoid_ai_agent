@@ -361,6 +361,8 @@ export class JobDiscoveryService {
 
 
 export function parseJobDataLakeSearchResult(result: unknown): unknown[] {
+  const structuredJobs = parseMcpJobResult(result);
+  if (structuredJobs.length > 0) return structuredJobs;
   const text = extractMcpText(result);
   if (!text) return [];
   const lines = text.split(/\r?\n/);
@@ -400,6 +402,8 @@ export function parseJobDataLakeSearchResult(result: unknown): unknown[] {
 }
 
 export function parseJobDataLakeDetailResult(result: unknown): unknown[] {
+  const structuredDetails = parseMcpJobResult(result);
+  if (structuredDetails.length > 0) return structuredDetails;
   const text = extractMcpText(result);
   if (!text) return [];
   const lines = text.split(/\r?\n/);
@@ -488,7 +492,10 @@ export function buildJobDetailArguments(schemaValue: unknown, job: NormalizedJob
   const properties = schema.properties ?? {};
   if (Object.keys(properties).length === 0) return undefined;
   const raw = job.raw ?? {};
+  const companyRecord = raw.company && typeof raw.company === 'object' ? raw.company as Record<string, unknown> : {};
+  const companySlug = raw.company_slug ?? raw.companySlug ?? companyRecord.slug;
   const jobId = raw.id ?? raw.jobId ?? raw.job_id ?? raw.jobKey ?? raw.job_key ?? raw.job_handle ?? raw.jobHandle ?? raw.key ?? raw.slug ?? job.sourceJobId;
+  const jobSlug = raw.job_slug ?? raw.jobSlug ?? raw.slug ?? job.sourceJobId ?? jobId;
   const searchId = raw.search_id ?? raw.searchId ?? raw.searchID;
   const country = raw.country ?? raw.country_name ?? profile.countries?.[0] ?? inferCountry(profile);
   const args: Record<string, unknown> = {};
@@ -498,6 +505,8 @@ export function buildJobDetailArguments(schemaValue: unknown, job: NormalizedJob
     const compact = name.toLowerCase().replace(/[^a-z0-9]/g, '');
     let value: unknown;
     if (compact === 'searchid' || compact === 'searchidentifier') value = searchId;
+    else if (compact === 'companyslug') value = companySlug;
+    else if (compact === 'jobslug') value = jobSlug;
     else if (compact === 'jobids' || compact === 'ids') value = jobId === undefined ? undefined : [String(jobId)];
     else if (/^(id|jobid|jobkey|jobhandle|key|jobcode|slug|jobslug|jobidentifier)$/.test(compact)) value = jobId;
     else if (/^(url|joburl|jobpostingurl|postingurl|link)$/.test(compact)) value = job.jobUrl ?? job.applicationUrl;
@@ -564,7 +573,7 @@ function resolveSourceId(serverId: string, raw: unknown): string {
   return serverId;
 }
 
-function inferArguments(schemaValue: unknown, profile: JobProfile, limit: number): Record<string, unknown> | undefined {
+export function inferArguments(schemaValue: unknown, profile: JobProfile, limit: number): Record<string, unknown> | undefined {
   if (!schemaValue || typeof schemaValue !== 'object') return undefined;
   const schema = schemaValue as { properties?: Record<string, { type?: string; description?: string; enum?: unknown[] }>; required?: string[] };
   const properties = schema.properties ?? {};
@@ -577,13 +586,16 @@ function inferArguments(schemaValue: unknown, profile: JobProfile, limit: number
     let value: unknown;
     if (/^(q|kw|query|querytext|keyword|keywords|search|searchtext|searchterm|searchquery|term|jobtitle|title|position|role|job|jobname)$/.test(compact)) value = /s$/.test(compact) && metadata.type === 'array' ? [profile.jobTitle, ...(profile.keywords ?? [])] : [profile.jobTitle, ...(profile.keywords ?? [])].filter(Boolean).join(' ');
     else if (/^(loc|location|locationname|city|cityname|region|geo|geography|place|joblocation|preferredlocation)$/.test(compact)) value = profile.location ?? profile.countries?.join(', ');
-    else if (/^(country|countries|countrycode)$/.test(compact)) value = metadata.type === 'array' ? profile.countries : profile.countries?.[0] ?? profile.location;
+    else if (compact === 'countries') value = metadata.type === 'array' ? profile.countries : profile.countries?.join(', ');
+    else if (/^(country|countryname|countrycode)$/.test(compact)) value = inferCountry(profile) ?? profile.countries?.[0];
     else if (/^(skills|skill|technologies|techstack)$/.test(compact)) value = metadata.type === 'array' ? profile.skills : profile.skills?.join(', ');
     else if (/^(experience|experienceyears|minexperience|yearsofexperience|experiencelevel)$/.test(compact)) value = profile.experienceYears;
     else if (/^(salarymin|minsalary|minimumsalary|salaryfrom)$/.test(compact)) value = profile.salaryMin;
     else if (/^(salarymax|maxsalary|maximumsalary|salaryto)$/.test(compact)) value = profile.salaryMax;
     else if (/^(currency|salarycurrency)$/.test(compact)) value = profile.salaryCurrency;
     else if (/^(remote|remoteonly|isremote)$/.test(compact)) value = profile.remote;
+    else if (compact === 'worldwide') value = /^(worldwide|global|anywhere|all countries|all locations)$/i.test(profile.location ?? '');
+    else if (compact === 'page') value = 1;
     else if (/^(limit|count|pageSize|maxresults|maxrows|numresults|resultlimit|perpage|pagesize|take)$/.test(compact)) value = limit;
     else if (/^(jobtype|employmenttype|employmenttypes)$/.test(compact)) value = metadata.type === 'array' ? profile.employmentTypes : profile.employmentTypes?.join(', ');
     else if (/^(userId|userid)$/.test(compact)) value = profile.userId;
