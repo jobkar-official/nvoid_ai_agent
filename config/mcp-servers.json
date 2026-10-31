@@ -681,9 +681,11 @@
           "bayt",
           "naukri"
         ],
-        "results_wanted": 10,
+        "results_wanted": 25,
         "hours_old": 720,
-        "is_remote": false,
+        "is_remote": {
+          "$profile": "remote"
+        },
         "country_indeed": "India",
         "fetch_description": false,
         "description_format": "markdown"
@@ -739,7 +741,16 @@
     "name": "Himalayas Remote Jobs MCP — public search, salary and company research",
     "enabled": true,
     "transport": "http",
-    "url": "https://mcp.himalayas.app/mcp"
+    "url": "https://mcp.himalayas.app/mcp",
+    "jobSearch": {
+      "tool": "search_jobs",
+      "arguments": {
+        "keyword": {
+          "$profile": "jobTitle"
+        },
+        "page": 1
+      }
+    }
   },
   {
     "id": "aidevboard",
