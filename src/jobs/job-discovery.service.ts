@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { JobProfile, NormalizedJob } from '../common/job.types';
 import { BackendSyncService } from '../common/backend-sync.service';
@@ -17,6 +17,22 @@ export interface SearchResult {
   searchReport: SearchSourceReport[];
   backendSync: { synced: boolean; reason?: string };
 }
+
+type JobSourceResult = {
+  serverId: string;
+  tool: string;
+  jobs: NormalizedJob[];
+  error?: string;
+  report?: SearchSourceReport;
+  detailsRequested?: number;
+  detailsFetched?: number;
+  detailTool?: string;
+  fetchedCount: number;
+  normalizedCount: number;
+  roleMatchedCount: number;
+  locationMatchedCount: number;
+  connectionStatus: 'searched' | 'search-error' | 'disconnected' | 'no-search-tool';
+};
 
 export interface SearchSourceReport {
   serverId: string;
@@ -77,17 +93,23 @@ export class JobDiscoveryService {
     const requestedLimit = Math.min(Math.max(1, limit), maximum);
     const effectiveProfile: JobProfile = { ...profile, location: profile.location?.trim() || (profile.countries ?? []).filter((country) => country.trim()).join(', ') || 'Worldwide' };
     const servers = this.mcpRegistry.getJobSearchServers().filter((item) => serverIds === undefined || serverIds.includes(item.server.id));
-    if (servers.length === 0) {
-      throw new ServiceUnavailableException('No connected MCP server has a configured or discoverable job-search tool. Configure jobSearch.tool for each MCP server in config/mcp-servers.json.');
-    }
-
-    const sourceResults: Array<{ serverId: string; tool: string; jobs: NormalizedJob[]; error?: string; report?: SearchSourceReport; detailsRequested?: number; detailsFetched?: number; detailTool?: string }> = await Promise.all(servers.map(async (entry) => {
+    const sourceResults: JobSourceResult[] = await Promise.all(servers.map(async (entry): Promise<JobSourceResult> => {
       try {
         const args = entry.configured
           ? resolveTemplate(entry.argumentsTemplate, { profile: effectiveProfile, limit: requestedLimit })
-          : inferArguments(entry.inputSchema, profile, requestedLimit);
+          : inferArguments(entry.inputSchema, effectiveProfile, requestedLimit);
         if (!entry.configured && args === undefined) {
-          return { serverId: entry.server.id, tool: entry.tool, jobs: [] as NormalizedJob[], error: 'Could not safely infer the required arguments. Define jobSearch.tool and jobSearch.arguments in mcp-servers.json.' };
+          return {
+            serverId: entry.server.id,
+            tool: entry.tool,
+            jobs: [],
+            error: 'Could not safely infer the required arguments. Define jobSearch.tool and jobSearch.arguments in mcp-servers.json.',
+            fetchedCount: 0,
+            normalizedCount: 0,
+            roleMatchedCount: 0,
+            locationMatchedCount: 0,
+            connectionStatus: 'search-error',
+          };
         }
 
         const toolArgs = entry.server.id === 'jobicy'
@@ -95,22 +117,35 @@ export class JobDiscoveryService {
               ...(args ?? {}),
               tag: effectiveProfile.jobTitle,
               geo: resolveJobicyGeo(effectiveProfile),
-              count: 200,
+              count: Math.max(50, requestedLimit),
             }
           : args ?? {};
+        const inferredCountry = inferCountry(effectiveProfile);
         const sourceArgs = entry.server.id === 'remoteok'
           ? {
-              ...(args ?? {}),
+              ...(toolArgs ?? {}),
               query: effectiveProfile.jobTitle,
               location: effectiveProfile.location,
               limit: Math.min(100, requestedLimit),
             }
-          : entry.server.id === 'aidevboard'
+          : entry.server.id === 'mcp-jobspy-speedyapply'
             ? {
                 ...(toolArgs ?? {}),
-                query: [effectiveProfile.jobTitle, effectiveProfile.location].filter(Boolean).join(' '),
+                results_wanted: Math.min(50, Math.max(10, requestedLimit)),
+                is_remote: effectiveProfile.remote === true,
               }
-            : toolArgs;
+            : entry.server.id === 'himalayas-mcp'
+              ? {
+                  ...(toolArgs ?? {}),
+                  ...(inferredCountry ? { country: inferredCountry } : {}),
+                  page: 1,
+                }
+              : entry.server.id === 'aidevboard'
+                ? {
+                    ...(toolArgs ?? {}),
+                    query: [effectiveProfile.jobTitle, effectiveProfile.location].filter(Boolean).join(' '),
+                  }
+                : toolArgs;
         const result = entry.server.id === 'jobicy'
           ? await this.callJobicyWithCache(entry.server.id, entry.tool, sourceArgs)
           : await this.mcpRegistry.callTool(entry.server.id, entry.tool, sourceArgs);
@@ -120,34 +155,74 @@ export class JobDiscoveryService {
           if (!searchId || !raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
           return { ...(raw as Record<string, unknown>), search_id: searchId };
         });
-        const jobs = rawJobs
-          .map((raw) => normalizeJob(raw, resolveSourceId(entry.server.id, raw), profile))
-          .filter((job): job is NormalizedJob => Boolean(job))
-          .map((job) => {
-            if (entry.server.id === 'remoteok') {
-              const directUrl = job.raw?.apply_url ?? job.raw?.applyUrl ?? job.raw?.application_url;
-              const applicationUrl = resolveRemoteOkApplicationUrl(job.jobUrl, directUrl);
-              return { ...job, applicationUrl, workMode: job.workMode ?? 'Remote' };
-            }
-            if (entry.server.id === 'apify-boards' || entry.server.id === 'apify-apna') {
-              const directUrl = job.raw?.directUrl ?? job.raw?.job_url_direct ?? job.raw?.applicationUrl ?? job.raw?.application_url;
-              const applicationUrl = resolveRemoteOkApplicationUrl(job.jobUrl, directUrl);
-              return { ...job, applicationUrl };
-            }
-            if (['jobicy', 'arbeitnow', 'workingnomads', 'himalayas', 'adzuna', 'jooble', 'remotive', 'weworkremotely', 'greenhouse', 'lever', 'ashby', 'serper-search'].includes(entry.server.id)) {
-              return { ...job, applicationUrl: undefined };
-            }
-            return job;
-          })
-          .filter((job) => matchesJobTitle(job.title, job.raw, profile.jobTitle, profile.experienceYears))
-          .filter((job) => matchesJobLocation(job, profile));
-        return { serverId: entry.server.id, tool: entry.tool, jobs, report: parseSearchReport(result, entry.server.id) };
+        const normalizedJobs = rawJobs
+          .map((raw) => normalizeJob(raw, resolveSourceId(entry.server.id, raw), effectiveProfile))
+          .filter((job): job is NormalizedJob => Boolean(job));
+        const preparedJobs = normalizedJobs.map((job) => {
+          if (entry.server.id === 'remoteok') {
+            const directUrl = job.raw?.apply_url ?? job.raw?.applyUrl ?? job.raw?.application_url;
+            const applicationUrl = resolveRemoteOkApplicationUrl(job.jobUrl, directUrl);
+            return { ...job, applicationUrl, workMode: job.workMode ?? 'Remote' };
+          }
+          if (entry.server.id === 'apify-boards' || entry.server.id === 'apify-apna') {
+            const directUrl = job.raw?.directUrl ?? job.raw?.job_url_direct ?? job.raw?.applicationUrl ?? job.raw?.application_url;
+            const applicationUrl = resolveRemoteOkApplicationUrl(job.jobUrl, directUrl);
+            return { ...job, applicationUrl };
+          }
+          if (['jobicy', 'arbeitnow', 'workingnomads', 'himalayas', 'adzuna', 'jooble', 'remotive', 'weworkremotely', 'greenhouse', 'lever', 'ashby', 'serper-search'].includes(entry.server.id)) {
+            return { ...job, applicationUrl: undefined };
+          }
+          return job;
+        });
+        const roleMatchedJobs = preparedJobs
+          .filter((job) => matchesJobTitle(job.title, job.raw, effectiveProfile.jobTitle, effectiveProfile.experienceYears));
+        const jobs = roleMatchedJobs.filter((job) => matchesJobLocation(job, effectiveProfile));
+        return {
+          serverId: entry.server.id,
+          tool: entry.tool,
+          jobs,
+          report: parseSearchReport(result, entry.server.id),
+          fetchedCount: rawJobs.length,
+          normalizedCount: normalizedJobs.length,
+          roleMatchedCount: roleMatchedJobs.length,
+          locationMatchedCount: jobs.length,
+          connectionStatus: 'searched',
+        };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        this.logger.warn(`Job discovery from ${entry.server.id}/${entry.tool} failed: ${message}`);
-        return { serverId: entry.server.id, tool: entry.tool, jobs: [] as NormalizedJob[], error: message };
+        this.logger.warn('Job discovery from ' + entry.server.id + '/' + entry.tool + ' failed: ' + message);
+        return {
+          serverId: entry.server.id,
+          tool: entry.tool,
+          jobs: [],
+          error: message,
+          fetchedCount: 0,
+          normalizedCount: 0,
+          roleMatchedCount: 0,
+          locationMatchedCount: 0,
+          connectionStatus: 'search-error',
+        };
       }
     }));
+    const searchableServerIds = new Set(servers.map((entry) => entry.server.id));
+    const unavailableSources: JobSourceResult[] = this.mcpRegistry.getStatuses()
+      .filter((status) => status.enabled)
+      .filter((status) => serverIds === undefined || serverIds.includes(status.id))
+      .filter((status) => !searchableServerIds.has(status.id))
+      .map((status) => ({
+        serverId: status.id,
+        tool: '',
+        jobs: [],
+        error: status.connected
+          ? 'MCP is connected but exposes no recognized job-search tool.'
+          : status.error ?? 'MCP server is not connected.',
+        fetchedCount: 0,
+        normalizedCount: 0,
+        roleMatchedCount: 0,
+        locationMatchedCount: 0,
+        connectionStatus: status.connected ? 'no-search-tool' : 'disconnected',
+      }));
+    sourceResults.push(...unavailableSources);
 
     const deduplicated = new Map<string, NormalizedJob>();
     const sourceForJobId = new Map<string, string>();
@@ -205,7 +280,21 @@ export class JobDiscoveryService {
       returnedCount: jobs.length,
       sourceCount: sourceResults.length,
       jobs,
-      sources: sourceResults.map((entry) => ({ serverId: entry.serverId, tool: entry.tool, found: entry.jobs.length, error: entry.error, report: entry.report, detailsRequested: entry.detailsRequested, detailsFetched: entry.detailsFetched, detailTool: entry.detailTool })),
+      sources: sourceResults.map((entry) => ({
+        serverId: entry.serverId,
+        tool: entry.tool,
+        found: entry.jobs.length,
+        fetchedCount: entry.fetchedCount,
+        normalizedCount: entry.normalizedCount,
+        roleMatchedCount: entry.roleMatchedCount,
+        locationMatchedCount: entry.locationMatchedCount,
+        connectionStatus: entry.connectionStatus,
+        error: entry.error,
+        report: entry.report,
+        detailsRequested: entry.detailsRequested,
+        detailsFetched: entry.detailsFetched,
+        detailTool: entry.detailTool,
+      })),
       searchReport: sourceResults.flatMap((entry) => entry.report ? [entry.report] : []),
       backendSync,
     };
