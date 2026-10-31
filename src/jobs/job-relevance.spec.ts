@@ -51,10 +51,14 @@ describe('job relevance filters', () => {
     expect(matchesJobLocation(job({ location: 'Worldwide' }), profile)).toBe(true);
   });
 
-  it('rejects jobs in a conflicting region and jobs with unknown eligibility for a specific location', () => {
+  it('rejects conflicting country restrictions but keeps remote jobs with unspecified eligibility', () => {
     expect(matchesJobLocation(job({ location: 'United States' }), profile)).toBe(false);
-    expect(matchesJobLocation(job({ location: 'Remote · eligibility not stated' }), profile)).toBe(false);
-    expect(matchesJobLocation(job({ location: undefined, raw: { description: 'Work remotely with a distributed team.' } }), profile)).toBe(false);
+    expect(matchesJobLocation(job({ location: 'Remote · eligibility not stated', workMode: 'Remote' }), profile)).toBe(true);
+    expect(matchesJobLocation(job({
+      location: undefined,
+      workMode: 'Remote',
+      raw: { description: 'Work remotely with a distributed team.' },
+    }), profile)).toBe(true);
   });
 
   it('accepts only explicit target region restrictions when the job omits its location field', () => {
