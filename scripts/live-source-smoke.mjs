@@ -14,7 +14,7 @@ async function request(path, options = {}) {
       ...(options.body ? { 'content-type': 'application/json' } : {}),
       ...(options.headers || {})
     },
-    signal: AbortSignal.timeout(90000)
+    signal: AbortSignal.timeout(180000)
   });
   const raw = await response.text();
   let data;
