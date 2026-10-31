@@ -197,7 +197,7 @@ function matchesLocation(job, requested) {
     const requestedTerms = tokens(location).filter((term) => term.length > 2);
     const actualTerms = new Set(tokens(structuredLocation));
     if (requestedTerms.some((term) => actualTerms.has(term))) return true;
-    return false;
+    return true;
   }
 
   const restriction = description.match(/(?:based in|based out of|located in|must be (?:located|based|resident) in|residing in|residing within|candidates? (?:must|should) be (?:located|based) in|only available in|available only in|position is restricted to)\s+([^.<\n]{2,70})/i);
@@ -212,7 +212,7 @@ function matchesLocation(job, requested) {
     const allowed = normalizeLocation(restriction[1]);
     return allowed.includes(requestedNormalized) || requestedNormalized.includes(allowed);
   }
-  return false;
+  return true;
 }
 
 function normalizeLocation(value) {
