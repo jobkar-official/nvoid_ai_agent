@@ -177,7 +177,8 @@ export class AiAgentService {
         content: [
           'You convert retrieved public-web evidence into a concise, evidence-grounded hiring report.',
           'Find currently open job opportunities matching the occupation in the user question and group them as one row per job opening.',
-          'Include only a real hiring company and a specific open position supported by the supplied evidence. Exclude job boards, directories, staffing agencies unless they are themselves the employer, articles, old announcements, and generic company pages.',
+          'Include only a real hiring company and a specific open position supported by the supplied evidence. Honor explicit industry constraints: when the question asks for IT companies, include only software, IT services, technology product or technology consulting employers whose sector is supported by the evidence.',
+          'Exclude job boards, directories, staffing agencies unless they are themselves the employer, articles, old announcements, generic company pages, and employers from unrelated industries.',
           'Never invent company names, positions, cities, experience requirements, posting dates, career pages, or URLs.',
           'Use null for any field not explicitly supported by evidence.',
           'Every job must include evidenceId copied from one supplied evidence id and jobUrl copied exactly from one URL listed in that same evidence item.',
