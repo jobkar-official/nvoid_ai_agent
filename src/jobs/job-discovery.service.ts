@@ -115,9 +115,8 @@ export class JobDiscoveryService {
         const toolArgs = entry.server.id === 'jobicy'
           ? {
               ...(args ?? {}),
-              tag: effectiveProfile.jobTitle,
               geo: resolveJobicyGeo(effectiveProfile),
-              count: Math.max(50, requestedLimit),
+              limit: requestedLimit,
             }
           : args ?? {};
         const inferredCountry = inferCountry(effectiveProfile);
@@ -132,7 +131,7 @@ export class JobDiscoveryService {
             ? {
                 ...(toolArgs ?? {}),
                 results_wanted: Math.min(50, Math.max(10, requestedLimit)),
-                is_remote: effectiveProfile.remote === true,
+                ...(effectiveProfile.remote === true ? { is_remote: true } : {}),
               }
             : entry.server.id === 'himalayas-mcp'
               ? {
@@ -143,7 +142,7 @@ export class JobDiscoveryService {
               : entry.server.id === 'aidevboard'
                 ? {
                     ...(toolArgs ?? {}),
-                    query: [effectiveProfile.jobTitle, effectiveProfile.location].filter(Boolean).join(' '),
+                    ...(effectiveProfile.remote === true ? { workplace: 'remote' } : {}),
                   }
                 : toolArgs;
         const result = entry.server.id === 'jobicy'
@@ -339,7 +338,7 @@ export class JobDiscoveryService {
 
 
   private async callJobicyWithCache(serverId: string, tool: string, args: Record<string, unknown>): Promise<unknown> {
-    const cacheKey = JSON.stringify({ serverId, tool, tag: args.tag, geo: args.geo });
+    const cacheKey = JSON.stringify({ serverId, tool, query: args.query ?? args.tag, geo: args.geo, limit: args.limit });
     const now = Date.now();
     const cached = this.jobicyCache.get(cacheKey);
     if (cached && cached.expiresAt > now) return cached.result;
