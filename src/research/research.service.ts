@@ -368,18 +368,18 @@ export class ResearchService {
 
 
 function isHiringResearchQuery(query: string): boolean {
-  return /\\b(hiring|hire|recruit(?:ing|ment)?|job openings?|open positions?|vacanc(?:y|ies)|careers?|currently employing)\\b/i.test(query)
-    && /\\b(company|companies|employer|employers|organization|organisations|openings?|positions?|jobs?)\\b/i.test(query);
+  return /\b(hiring|hire|recruit(?:ing|ment)?|job openings?|open positions?|vacanc(?:y|ies)|careers?|currently employing)\b/i.test(query)
+    && /\b(company|companies|employer|employers|organization|organisations|openings?|positions?|jobs?)\b/i.test(query);
 }
 
 function buildHiringSearchQueries(query: string): string[] {
-  const roleMatch = query.match(/\\b(?:hiring|hire|recruiting|recruit)\\s+(?:for\\s+)?(.+?)(?=\\s+(?:in|across|throughout|at|and identify|identify|with|including)\\b|[.!?]|$)/i);
+  const roleMatch = query.match(/\b(?:hiring|hire|recruiting|recruit)\s+(?:for\s+)?(.+?)(?=\s+(?:in|across|throughout|at|and identify|identify|with|including)\b|[.!?]|$)/i);
   const role = (roleMatch?.[1] ?? query)
-    .replace(/\\b(currently|companies|company|employers|employer|openings?|positions?|jobs?|in india|across india)\\b/gi, ' ')
-    .replace(/\\s+/g, ' ')
+    .replace(/\b(currently|companies|company|employers|employer|openings?|positions?|jobs?|in india|across india)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 90) || 'software developer';
-  const canonicalRole = role.replace(/\\bdevelopers\\b/gi, 'developer').replace(/\\bengineers\\b/gi, 'engineer');
+  const canonicalRole = role.replace(/\bdevelopers\b/gi, 'developer').replace(/\bengineers\b/gi, 'engineer');
   return [...new Set([
     '"' + canonicalRole + '" India jobs careers',
     '"' + canonicalRole + '" India official company careers opening',
@@ -392,11 +392,11 @@ function buildHiringSearchQueries(query: string): string[] {
 }
 
 function normalizeCompanyName(value: string): string {
-  return value.toLowerCase().replace(/\\b(private limited|pvt\\.? ltd\\.?|limited|ltd\\.?|incorporated|inc\\.?)\\b/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  return value.toLowerCase().replace(/\b(private limited|pvt\.? ltd\.?|limited|ltd\.?|incorporated|inc\.?)\b/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
 function asText(value: unknown): string | undefined {
-  if (typeof value === 'string' && value.trim()) return value.replace(/<[^>]*>/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 500);
+  if (typeof value === 'string' && value.trim()) return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
   if (typeof value === 'number') return String(value);
   return undefined;
 }
@@ -414,7 +414,7 @@ function buildStructuredHiringResults(records: ResearchRecord[], limit: number):
       const company = asText(organization.name ?? posting.company);
       const position = asText(posting.title ?? posting.name);
       const jobUrl = asText(posting.url ?? record.url);
-      if (!company || !position || !jobUrl || !/^https?:\\/\\//i.test(jobUrl)) continue;
+      if (!company || !position || !jobUrl || !/^https?:\/\//i.test(jobUrl)) continue;
       if (typeof posting.validThrough === 'string' && Number.isFinite(Date.parse(posting.validThrough)) && Date.parse(posting.validThrough) < Date.now()) continue;
       const locations = Array.isArray(posting.locations) ? posting.locations : [];
       const location = asText(posting.location ?? locations.join(', '));
@@ -427,7 +427,7 @@ function buildStructuredHiringResults(records: ResearchRecord[], limit: number):
         position,
         ...(location ? { location } : {}),
         ...(experience ? { experience } : {}),
-        ...(careerPageUrl && /^https?:\\/\\//i.test(careerPageUrl) ? { careerPageUrl } : {}),
+        ...(careerPageUrl && /^https?:\/\//i.test(careerPageUrl) ? { careerPageUrl } : {}),
         jobUrl,
         ...(asText(posting.datePosted) ? { postedAt: asText(posting.datePosted) } : {}),
         ...(asText(posting.employmentType) ? { employmentType: asText(posting.employmentType) } : {}),
