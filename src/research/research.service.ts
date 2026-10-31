@@ -309,14 +309,16 @@ export class ResearchService {
     const records = [...unique.values()];
     let hiringResearch: HiringResearchResult | undefined;
     if (hiringResearchQuery) {
-      try {
-        const structured = await this.ai.structureHiringResearchResults(query, records, Math.min(maxRecords, 100));
-        if (structured) {
-          const uniqueCompanies = new Set(structured.jobs.map((job) => normalizeCompanyName(job.company))).size;
-          hiringResearch = { ...structured, uniqueCompanies };
+      if (this.ai.isEnabled()) {
+        try {
+          const structured = await this.ai.structureHiringResearchResults(query, records, Math.min(maxRecords, 100));
+          if (structured) {
+            const uniqueCompanies = new Set(structured.jobs.map((job) => normalizeCompanyName(job.company))).size;
+            hiringResearch = { ...structured, uniqueCompanies };
+          }
+        } catch (error) {
+          this.logger.warn('Hiring research synthesis failed; structured page data will be used: ' + messageOf(error));
         }
-      } catch (error) {
-        this.logger.warn('Hiring research synthesis failed; structured page data will be used: ' + messageOf(error));
       }
       if (!hiringResearch) hiringResearch = buildStructuredHiringResults(records, Math.min(maxRecords, 100));
     }
