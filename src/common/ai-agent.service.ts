@@ -235,7 +235,9 @@ export class AiAgentService {
       .filter((job, index, all) => all.findIndex((candidate) => candidate.jobUrl === job.jobUrl) === index)
       .slice(0, maxResults);
     return {
-      summary: typeof parsed.summary === 'string' ? parsed.summary.trim().slice(0, 500) : jobs.length + ' evidence-backed open position(s) found.',
+      summary: typeof parsed.summary === 'string' && parsed.summary.trim()
+        ? parsed.summary.trim().slice(0, 500)
+        : jobs.length + ' evidence-backed open position(s) found.',
       jobs,
     };
   }
