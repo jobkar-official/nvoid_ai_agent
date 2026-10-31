@@ -91,6 +91,7 @@ export interface SearchSourceReport {
 export class JobDiscoveryService {
   private readonly logger = new Logger(JobDiscoveryService.name);
   private readonly jobicyCache = new Map<string, { expiresAt: number; result: unknown }>();
+  private readonly titleVariantCache = new Map<string, { expiresAt: number; variants: string[] }>();
 
   constructor(
     private readonly mcpRegistry: McpRegistryService,
@@ -130,23 +131,40 @@ export class JobDiscoveryService {
     const servers = this.mcpRegistry.getJobSearchServers().filter((item) => serverIds === undefined || serverIds.includes(item.server.id));
     let titleVariants: string[] = [];
     if (servers.some((entry) => entry.server.id === 'serper-search') && this.aiAgent.isEnabled()) {
-      try {
-        const descriptions = new Map(this.mcpRegistry.getToolCatalog().flatMap((server) => server.tools.map((tool) => [
-          server.serverId + ':' + tool.name,
-          tool.description ?? server.serverName,
-        ] as const)));
-        const proposed = await this.aiAgent.planJobSearchTitleVariants(effectiveProfile, servers.map((entry) => ({
-          serverId: entry.server.id,
-          toolName: entry.tool,
-          description: descriptions.get(entry.server.id + ':' + entry.tool),
-          inputSchema: entry.inputSchema,
-        })));
-        titleVariants = [...new Set(proposed.filter((variant) => (
-          variant.toLowerCase() !== effectiveProfile.jobTitle.toLowerCase()
-          && matchesJobTitle(variant, undefined, effectiveProfile.jobTitle, effectiveProfile.experienceYears)
-        )))].slice(0, 5);
-      } catch (error) {
-        this.logger.warn('LLM job-title expansion failed; deterministic source queries will be used: ' + (error instanceof Error ? error.message : String(error)));
+      const variantCacheKey = JSON.stringify({
+        jobTitle: effectiveProfile.jobTitle.trim().toLowerCase(),
+        experienceYears: effectiveProfile.experienceYears ?? null,
+        skills: [...(effectiveProfile.skills ?? [])].map((value) => value.toLowerCase()).sort(),
+        keywords: [...(effectiveProfile.keywords ?? [])].map((value) => value.toLowerCase()).sort(),
+      });
+      const cachedVariants = this.titleVariantCache.get(variantCacheKey);
+      if (cachedVariants && cachedVariants.expiresAt > Date.now()) {
+        titleVariants = cachedVariants.variants;
+      } else {
+        if (cachedVariants) this.titleVariantCache.delete(variantCacheKey);
+        try {
+          const descriptions = new Map(this.mcpRegistry.getToolCatalog().flatMap((server) => server.tools.map((tool) => [
+            server.serverId + ':' + tool.name,
+            tool.description ?? server.serverName,
+          ] as const)));
+          const proposed = await this.aiAgent.planJobSearchTitleVariants(effectiveProfile, servers.map((entry) => ({
+            serverId: entry.server.id,
+            toolName: entry.tool,
+            description: descriptions.get(entry.server.id + ':' + entry.tool),
+            inputSchema: entry.inputSchema,
+          })));
+          titleVariants = [...new Set(proposed.filter((variant) => (
+            variant.toLowerCase() !== effectiveProfile.jobTitle.toLowerCase()
+            && matchesJobTitle(variant, undefined, effectiveProfile.jobTitle, effectiveProfile.experienceYears)
+          )))].slice(0, 5);
+          this.titleVariantCache.set(variantCacheKey, { expiresAt: Date.now() + 86400000, variants: titleVariants });
+          if (this.titleVariantCache.size > 100) {
+            const oldest = this.titleVariantCache.keys().next().value;
+            if (oldest) this.titleVariantCache.delete(oldest);
+          }
+        } catch (error) {
+          this.logger.warn('LLM job-title expansion failed; deterministic source queries will be used: ' + (error instanceof Error ? error.message : String(error)));
+        }
       }
     }
     const sourceResults: JobSourceResult[] = await Promise.all(servers.map(async (entry): Promise<JobSourceResult> => {

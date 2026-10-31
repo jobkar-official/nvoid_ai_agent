@@ -71,7 +71,7 @@ export class AiAgentService {
           connectedJobSearchTools: inventory,
         }),
       },
-    ], 0, true);
+    ], 0, true, 8000);
     const parsed = JSON.parse(output) as { titleVariants?: unknown };
     if (!Array.isArray(parsed.titleVariants)) return [];
     return [...new Set(parsed.titleVariants.flatMap((value) => {
@@ -256,11 +256,13 @@ export class AiAgentService {
     messages: Array<{ role: 'system' | 'user'; content: string }>,
     temperature: number,
     jsonMode = false,
+    timeoutOverrideMs?: number,
   ): Promise<string> {
     const baseUrl = this.configService.get<string>('llm.baseUrl', 'https://api.openai.com/v1').replace(/\/$/, '');
     const apiKey = this.configService.get<string>('llm.apiKey', '');
     const model = this.configService.get<string>('llm.model', '');
-    const timeoutMs = this.configService.get<number>('llm.timeoutMs', 30000);
+    const configuredTimeoutMs = this.configService.get<number>('llm.timeoutMs', 30000);
+    const timeoutMs = Math.max(1000, Math.min(configuredTimeoutMs, timeoutOverrideMs ?? configuredTimeoutMs));
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
