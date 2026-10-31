@@ -385,6 +385,16 @@ function matchesLocation(job, requested, remoteOnly = false) {
     const wanted = tokens(target).filter((term) => term.length > 2);
     const offered = new Set(tokens(structured));
     if (wanted.some((term) => offered.has(term))) return true;
+    const restriction = description.match(/(?:based in|based out of|located in|must be (?:located|based|resident) in|residing in|residing within|candidates? (?:must|should) be (?:located|based) in|only available in|available only in|position is restricted to)\\s+([^.<\\n]{2,70})/i);
+    if (restriction) {
+      const requestedCountries = countriesFor(target);
+      const restrictedCountries = countriesFor(restriction[1]);
+      if (requestedCountries.length && restrictedCountries.length) return requestedCountries.some((country) => restrictedCountries.includes(country));
+      const restrictedRegion = regionFor(restriction[1]);
+      if (targetRegion && restrictedRegion) return targetRegion === restrictedRegion;
+      const restricted = normalize(restriction[1]);
+      return restricted.includes(requestedNormalized) || requestedNormalized.includes(restricted);
+    }
     return remoteJob;
   }
 
