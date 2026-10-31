@@ -110,6 +110,21 @@ function parseJobPostings(html, pageUrl) {
     if (typeof value !== 'string') return '';
     return htmlText(value).slice(0, max);
   };
+  const structuredText = (value, depth = 0) => {
+    if (depth > 3 || value === null || value === undefined) return '';
+    if (typeof value === 'string' || typeof value === 'number') return cleanField(String(value), 800);
+    if (Array.isArray(value)) return value.map((item) => structuredText(item, depth + 1)).filter(Boolean).join('; ').slice(0, 800);
+    if (typeof value === 'object') {
+      return Object.entries(value)
+        .filter(([key]) => key !== '@type' && key !== '@id')
+        .map(([key, item]) => {
+          const text = structuredText(item, depth + 1);
+          return text ? key + ': ' + text : '';
+        })
+        .filter(Boolean).join('; ').slice(0, 800);
+    }
+    return '';
+  };
   const locationsFrom = (value) => {
     const locations = Array.isArray(value) ? value : value ? [value] : [];
     return locations.map((item) => {
@@ -130,7 +145,7 @@ function parseJobPostings(html, pageUrl) {
       : typeof mainEntity === 'string' ? mainEntity
         : mainEntity && typeof mainEntity === 'object' && typeof mainEntity['@id'] === 'string' ? mainEntity['@id'] : pageUrl;
     const location = locationsFrom(node.jobLocation);
-    const experience = cleanField(node.experienceRequirements || node.experienceInPlaceOfEducation || node.qualifications, 800);
+    const experience = structuredText(node.experienceRequirements || node.experienceInPlaceOfEducation || node.qualifications);
     const validThrough = cleanField(node.validThrough, 80);
     if (!cleanField(node.title || node.name, 220) || !cleanField(organization.name, 180)) return [];
     return [{
@@ -142,7 +157,7 @@ function parseJobPostings(html, pageUrl) {
       ...(cleanField(node.description, 5000) ? { description: cleanField(node.description, 5000) } : {}),
       ...(cleanField(node.datePosted, 80) ? { datePosted: cleanField(node.datePosted, 80) } : {}),
       ...(validThrough ? { validThrough } : {}),
-      ...(cleanField(node.employmentType, 100) ? { employmentType: cleanField(node.employmentType, 100) } : {}),
+      ...(structuredText(node.employmentType) ? { employmentType: structuredText(node.employmentType).slice(0, 100) } : {}),
       url: (() => { try { return new URL(url, pageUrl).href; } catch { return pageUrl; } })(),
     }];
   }).slice(0, 30);
