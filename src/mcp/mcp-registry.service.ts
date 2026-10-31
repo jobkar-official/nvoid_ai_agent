@@ -85,27 +85,42 @@ export class McpRegistryService implements OnApplicationBootstrap, OnModuleDestr
 
   getJobSearchServers(): Array<{ server: McpServerConfig; tool: string; argumentsTemplate: Record<string, unknown>; inputSchema?: unknown; configured: boolean }> {
     const matches: Array<{ server: McpServerConfig; tool: string; argumentsTemplate: Record<string, unknown>; inputSchema?: unknown; configured: boolean }> = [];
+    const seen = new Set<string>();
+    const isJobSearchTool = (tool: ToolInfo): boolean => {
+      const identity = (tool.name + " " + (tool.description ?? "")).toLowerCase();
+      return /(search|find|list|discover|fetch|query).{0,45}(jobs?|vacanc(?:y|ies)|open.?roles?|positions?|opportunit(?:y|ies)|recruitment|tenders?)|(jobs?|vacanc(?:y|ies)|open.?roles?|positions?|opportunit(?:y|ies)|recruitment|tenders?).{0,45}(search|find|list|discover|fetch|query)|\bget[_\s-]?(jobs?|vacanc(?:y|ies)|open.?roles?|positions?|opportunit(?:y|ies)|tenders?)\b/i.test(identity)
+        && !/(apply|submit|application|delete|remove|update|create|detail|details|profile|company_profile)/i.test(tool.name)
+        && tool.annotations?.destructiveHint !== true;
+    };
+
     for (const entry of this.servers.values()) {
       if (!entry.connected) continue;
       const configuredToolName = entry.config.jobSearch?.tool;
       const isPlaceholderTool = !configuredToolName || /^(replace_|todo|auto_discover)/i.test(configuredToolName);
       const configuredTool = !isPlaceholderTool
-        ? entry.tools.find((item) => item.name === configuredToolName)
+        ? entry.tools.find((item) => item.name === configuredToolName && isJobSearchTool(item))
         : undefined;
-      if (configuredTool) {
-        matches.push({ server: entry.config, tool: configuredTool.name, argumentsTemplate: entry.config.jobSearch?.arguments ?? {}, inputSchema: configuredTool.inputSchema, configured: true });
-        continue;
+      const candidates = entry.tools.filter(isJobSearchTool);
+      if (configuredTool && !candidates.some((tool) => tool.name === configuredTool.name)) {
+        candidates.unshift(configuredTool);
       }
-      const candidate = entry.tools.find((tool) => {
-        const identity = `${tool.name} ${tool.description ?? ''}`.toLowerCase();
-        return /(search|find|list|discover|fetch|query).{0,45}(jobs?|vacanc(?:y|ies)|open.?roles?|positions?|opportunit(?:y|ies)|recruitment|tenders?)|(jobs?|vacanc(?:y|ies)|open.?roles?|positions?|opportunit(?:y|ies)|recruitment|tenders?).{0,45}(search|find|list|discover|fetch|query)|\bget[_\s-]?(jobs?|vacanc(?:y|ies)|open.?roles?|positions?|opportunit(?:y|ies)|tenders?)\b/i.test(identity)
-          && !/(apply|submit|application|delete|remove|update|create)/i.test(tool.name);
-      });
-      if (candidate) matches.push({ server: entry.config, tool: candidate.name, argumentsTemplate: {}, inputSchema: candidate.inputSchema, configured: false });
+
+      for (const tool of candidates) {
+        const key = entry.config.id + ":" + tool.name;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const configured = Boolean(configuredTool && tool.name === configuredTool.name);
+        matches.push({
+          server: entry.config,
+          tool: tool.name,
+          argumentsTemplate: configured ? entry.config.jobSearch?.arguments ?? {} : {},
+          inputSchema: tool.inputSchema,
+          configured,
+        });
+      }
     }
     return matches;
   }
-
   getJobApplicationConfig(serverId: string): { server: McpServerConfig; tool: string; argumentsTemplate: Record<string, unknown> } | undefined {
     const entry = this.servers.get(serverId);
     if (!entry?.connected || !entry.config.jobApplication?.tool) return undefined;
