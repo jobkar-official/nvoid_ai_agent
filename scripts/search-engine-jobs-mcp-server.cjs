@@ -520,7 +520,7 @@ async function discover(args,limit) {
 }
 async function search(args) {
   const role=String(args.query||'').trim(),loc=String(args.location||(args.countries||[]).join(', ')||'').trim(),limit=Number.isFinite(Number(args.limit))?Math.min(1000,Math.max(1,Math.floor(Number(args.limit)))):500;
-  const key=JSON.stringify({role,loc,skills:args.skills||[],keywords:args.keywords||[],countries:args.countries||[],remote:args.remote===true,limit}),hit=cache.get(key);
+  const key=JSON.stringify({role,loc,skills:args.skills||[],keywords:args.keywords||[],searchTerms:args.searchTerms||[],titleVariants:args.titleVariants||[],countries:args.countries||[],remote:args.remote===true,limit}),hit=cache.get(key);
   if(hit&&hit.expires>Date.now())return{...hit.value,jobs:hit.value.jobs.slice(0,limit),report:{...hit.value.report,targetCount:limit,returnedJobs:Math.min(limit,hit.value.jobs.length),reachedRequestedLimit:hit.value.jobs.length>=limit}};
   if(pending.has(key)){const value=await pending.get(key);return{...value,jobs:value.jobs.slice(0,limit)};}
   const work=discover(args,Math.min(limit,envInt('SERPER_SEARCH_MAX_RESULTS',1000,50,1000)));pending.set(key,work);
