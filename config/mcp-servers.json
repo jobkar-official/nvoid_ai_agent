@@ -6,12 +6,13 @@
     "transport": "http",
     "url": "https://jobicy.com/mcp",
     "jobSearch": {
-      "tool": "search_jobs",
+      "tool": "get_jobs",
       "arguments": {
-        "query": {
+        "tag": {
           "$profile": "jobTitle"
         },
-        "limit": {
+        "geo": "anywhere",
+        "count": {
           "$context": "limit"
         }
       }
@@ -821,13 +822,13 @@
     "jobSearch": {
       "tool": "search_jobs",
       "arguments": {
-        "q": {
+        "query": {
           "$profile": "jobTitle"
         },
         "location": {
           "$profile": "location"
         },
-        "skills": "{{profile.skills}}",
+        "skills": "{{profile.skills|csv}}",
         "sort_by": "posted_at:desc",
         "per_page": 50,
         "page": 1

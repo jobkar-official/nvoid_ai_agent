@@ -26,10 +26,13 @@ function resolveValue(value: unknown, context: TemplateContext): unknown {
     return result;
   }
   if (typeof value === 'string') {
-    const match = /^\{\{(profile|job)\.([a-zA-Z0-9_]+)\}\}$/.exec(value);
-    if (match) return match[1] === 'profile' ? context.profile[match[2] as keyof JobProfile] : context.job?.[match[2] as keyof NormalizedJob];
+    const match = /^\{\{(profile|job)\.([a-zA-Z0-9_]+)(?:\|(csv|join))?\}\}$/.exec(value);
+    if (match) {
+      const result = match[1] === 'profile' ? context.profile[match[2] as keyof JobProfile] : context.job?.[match[2] as keyof NormalizedJob];
+      return match[3] && Array.isArray(result) ? result.join(', ') : result;
+    }
     if (value === '{{limit}}') return context.limit;
-    return value.replace(/\{\{(profile|job)\.([a-zA-Z0-9_]+)\}\}/g, (_whole, kind: string, key: string) => {
+    return value.replace(/\{\{(profile|job)\.([a-zA-Z0-9_]+)(?:\|(csv|join))?\}\}/g, (_whole, kind: string, key: string) => {
       const result = kind === 'profile' ? context.profile[key as keyof JobProfile] : context.job?.[key as keyof NormalizedJob];
       if (Array.isArray(result)) return result.join(', ');
       if (result === undefined || result === null) return '';

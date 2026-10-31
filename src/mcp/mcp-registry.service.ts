@@ -100,10 +100,11 @@ export class McpRegistryService implements OnApplicationBootstrap, OnModuleDestr
       const configuredTool = !isPlaceholderTool
         ? entry.tools.find((item) => item.name === configuredToolName && isJobSearchTool(item))
         : undefined;
-      const candidates = entry.tools.filter(isJobSearchTool);
-      if (configuredTool && !candidates.some((tool) => tool.name === configuredTool.name)) {
-        candidates.unshift(configuredTool);
-      }
+      const candidates = entry.config.id === 'openings-mcp'
+        ? entry.tools.filter((tool) => /^[a-z0-9]+_search_jobs$/i.test(tool.name) && isJobSearchTool(tool))
+        : configuredTool
+          ? [configuredTool]
+          : entry.tools.filter(isJobSearchTool);
 
       for (const tool of candidates) {
         const key = entry.config.id + ":" + tool.name;

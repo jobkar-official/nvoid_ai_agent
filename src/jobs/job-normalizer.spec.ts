@@ -119,6 +119,18 @@ describe('job-normalizer', () => {
     )).toBe('https://careers.example.org/jobs/123');
   });
 
+  it('uses a provider job excerpt as the visible description when full text is not included in search results', () => {
+    const job = normalizeJob({
+      id: 'himalayas-remote-backend',
+      title: 'Backend Engineer',
+      companyName: 'Example Labs',
+      excerpt: 'Build scalable APIs, own data services, and work with a distributed engineering team.',
+      url: 'https://himalayas.app/jobs/backend-engineer',
+    }, 'himalayas', profile);
+
+    expect(job?.description).toBe('Build scalable APIs, own data services, and work with a distributed engineering team.');
+  });
+
   it('rejects records without a job title', () => {
     expect(normalizeJob({ company: 'Example' }, 'example-mcp', profile)).toBeUndefined();
   });

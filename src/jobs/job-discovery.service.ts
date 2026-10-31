@@ -137,7 +137,7 @@ export class JobDiscoveryService {
           ? {
               ...(args ?? {}),
               geo: resolveJobicyGeo(effectiveProfile),
-              limit: requestedLimit,
+              count: Math.min(200, requestedLimit),
             }
           : args ?? {};
         const inferredCountry = inferCountry(effectiveProfile);
@@ -363,7 +363,7 @@ export class JobDiscoveryService {
 
 
   private async callJobicyWithCache(serverId: string, tool: string, args: Record<string, unknown>): Promise<unknown> {
-    const cacheKey = JSON.stringify({ serverId, tool, query: args.query ?? args.tag, geo: args.geo, limit: args.limit });
+    const cacheKey = JSON.stringify({ serverId, tool, query: args.query ?? args.tag, geo: args.geo, count: args.count ?? args.limit });
     const now = Date.now();
     const cached = this.jobicyCache.get(cacheKey);
     if (cached && cached.expiresAt > now) return cached.result;
