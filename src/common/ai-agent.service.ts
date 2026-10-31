@@ -195,7 +195,7 @@ export class AiAgentService {
     ], 0, true, 15000);
     const parsed = JSON.parse(output) as { summary?: unknown; jobs?: unknown };
     if (!Array.isArray(parsed.jobs)) return undefined;
-    const normalizeEvidenceText = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\\s+/g, ' ').trim();
+    const normalizeEvidenceText = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     const evidenceById = new Map(evidence.map((item) => [
       item.id,
       { urls: new Set(item.urls), searchableText: normalizeEvidenceText(JSON.stringify(item)) },
