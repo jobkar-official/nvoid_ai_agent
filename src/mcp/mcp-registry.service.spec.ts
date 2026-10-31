@@ -17,7 +17,6 @@ describe('McpRegistryService job-search tool discovery', () => {
       name: 'Naukri MCP',
       enabled: true,
       transport: 'http',
-      url: 'https://mcp.example.test',
       jobSearch: { tool: 'REPLACE_WITH_ACTUAL_SEARCH_TOOL_NAME', arguments: {} },
     };
     const service = createService(config, [
@@ -47,7 +46,6 @@ describe('McpRegistryService job-search tool discovery', () => {
       name: 'Public Job Feed MCP',
       enabled: true,
       transport: 'http',
-      url: 'https://mcp.example.test',
       jobSearch: { tool: 'REPLACE_WITH_ACTUAL_SEARCH_TOOL_NAME', arguments: {} },
     };
     const service = createService(config, [{
@@ -68,7 +66,6 @@ describe('McpRegistryService job-search tool discovery', () => {
       name: 'Custom Jobs MCP',
       enabled: true,
       transport: 'http',
-      url: 'https://mcp.example.test',
       jobSearch: { tool: 'find_open_roles', arguments: { query: { '$profile': 'jobTitle' } } },
     };
     const service = createService(config, [
