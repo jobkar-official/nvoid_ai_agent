@@ -357,6 +357,7 @@ function locationEvidence(job) {
 
 function matchesLocation(job, requested, remoteOnly = false) {
   const target = String(requested || '').trim();
+  const remoteJob = remoteOnly || job.remote === true || job.is_remote === true || /\bremote\b/i.test(text(job.workMode || job.work_mode || job.workplace));
   if (!target) return false;
   if (/^(remote|worldwide|global|anywhere|all locations|all countries)$/i.test(target)) return true;
   if (SOURCE === 'himalayas' && Array.isArray(job.locationRestrictions) && job.locationRestrictions.length === 0) return true;
@@ -384,7 +385,7 @@ function matchesLocation(job, requested, remoteOnly = false) {
     const wanted = tokens(target).filter((term) => term.length > 2);
     const offered = new Set(tokens(structured));
     if (wanted.some((term) => offered.has(term))) return true;
-    return false;
+    return remoteJob;
   }
 
   const restriction = description.match(/(?:based in|based out of|located in|must be (?:located|based|resident) in|residing in|residing within|candidates? (?:must|should) be (?:located|based) in|only available in|available only in|position is restricted to)\s+([^.<\n]{2,70})/i);
@@ -401,7 +402,7 @@ function matchesLocation(job, requested, remoteOnly = false) {
   const mentionedRegions = ['latin-america', 'apac', 'europe', 'north-america', 'middle-east', 'africa'];
   const descriptionRegion = regionFor(description);
   if (targetRegion && descriptionRegion) return targetRegion === descriptionRegion;
-  if (remoteOnly) return false;
+  if (remoteJob) return true;
   return false;
 }
 
