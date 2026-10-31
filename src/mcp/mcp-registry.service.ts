@@ -156,7 +156,9 @@ export class McpRegistryService implements OnApplicationBootstrap, OnModuleDestr
       ? Math.max(configuredTimeoutMs, 300000)
       : ['apify-boards', 'apify-apna'].includes(serverId)
         ? Math.max(configuredTimeoutMs, 200000)
-        : configuredTimeoutMs;
+        : serverId === 'mcp-jobspy-speedyapply'
+          ? Math.max(configuredTimeoutMs, 120000)
+          : configuredTimeoutMs;
     const result = await withTimeout(entry.client.callTool({ name: toolName, arguments: args }), timeoutMs, `MCP call ${serverId}/${toolName}`);
 
     if (result && typeof result === 'object' && 'isError' in result && result.isError) {
