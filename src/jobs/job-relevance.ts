@@ -278,7 +278,7 @@ function matchesOneLocation(job: NormalizedJob, target: string): boolean {
       const allowed = normalize(restriction[1]);
       return allowed.includes(targetNormalized) || targetNormalized.includes(allowed);
     }
-    return false;
+    return true;
   }
 
   if (targetCountries.length && jobCountries.length) {
@@ -295,7 +295,7 @@ function matchesOneLocation(job: NormalizedJob, target: string): boolean {
     const wanted = tokens(target).filter((term) => term.length > 2);
     const offered = new Set(tokens(structured));
     if (wanted.some((term) => offered.has(term))) return true;
-    return false;
+    return isRemoteJob(job);
   }
 
   const restriction = description.match(/(?:based in|based out of|located in|must be (?:located|based|resident) in|residing in|residing within|candidates? (?:must|should) be (?:located|based) in|only available in|available only in|position is restricted to)\s+([^.<\n]{2,70})/i);
@@ -304,7 +304,7 @@ function matchesOneLocation(job: NormalizedJob, target: string): boolean {
     return allowed.includes(targetNormalized) || targetNormalized.includes(allowed);
   }
 
-  return false;
+  return isRemoteJob(job);
 }
 
 export function matchesJobLocation(job: NormalizedJob, profile: JobProfile): boolean {
