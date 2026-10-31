@@ -146,10 +146,14 @@ export class ResearchService {
       if (missing.length > 0) warnings.push('These requested server IDs are not connected or were not found: ' + missing.join(', '));
     }
 
+    const hiringResearchQuery = isHiringResearchQuery(query);
+    const publicWebSearch = hiringResearchQuery
+      ? safeTools.find((entry) => entry.serverId === 'serper-research' && entry.tool.name === 'search_web')
+      : undefined;
     let planner: 'llm' | 'heuristic' = 'heuristic';
     let plans: ResearchCallPlan[] = [];
     let planningError: string | undefined;
-    if (safeTools.length > 0 && this.ai.isEnabled()) {
+    if (safeTools.length > 0 && this.ai.isEnabled() && !publicWebSearch) {
       try {
         const proposed = await this.ai.planResearchCalls(
           query,
@@ -170,40 +174,35 @@ export class ResearchService {
         planningError = 'The AI planner failed; schema-based discovery was used instead: ' + messageOf(error);
         this.logger.warn(planningError);
       }
-    } else if (!this.ai.isEnabled()) {
+    } else if (!this.ai.isEnabled() && !publicWebSearch) {
       warnings.push('LLM_API_KEY or LLM_MODEL is not configured. Research is running with schema-based query and argument matching, not AI planning.');
     }
 
-    if (plans.length === 0) {
+    if (!publicWebSearch && plans.length === 0) {
       plans = buildHeuristicPlan(query, safeTools, maxRecords, maxTools);
       planner = 'heuristic';
     }
 
-    const hiringResearchQuery = isHiringResearchQuery(query);
-    if (hiringResearchQuery) {
-      const publicWebSearch = safeTools.find((entry) => entry.serverId === 'serper-research' && entry.tool.name === 'search_web');
-      if (publicWebSearch) {
-        const webArguments = validateArguments({
-          query,
-          queries: buildHiringSearchQueries(query),
-          limit: Math.min(maxRecords, 200),
-          country: 'IN',
-          crawlPages: true,
-        }, publicWebSearch.tool.inputSchema, maxRecords);
-        if (webArguments) {
-          plans = [
-            {
-              serverId: publicWebSearch.serverId,
-              toolName: publicWebSearch.tool.name,
-              arguments: webArguments,
-              reason: 'Focused Google and public-page discovery for current employer job openings.',
-            },
-            ...plans.filter((plan) => !(plan.serverId === publicWebSearch.serverId && plan.toolName === publicWebSearch.tool.name)).slice(0, Math.max(0, maxTools - 1)),
-          ];
-        }
+    if (hiringResearchQuery && publicWebSearch) {
+      const webArguments = validateArguments({
+        query,
+        queries: buildHiringSearchQueries(query),
+        limit: Math.min(maxRecords, 200),
+        country: 'IN',
+        crawlPages: true,
+      }, publicWebSearch.tool.inputSchema, maxRecords);
+      if (webArguments) {
+        plans = [{
+          serverId: publicWebSearch.serverId,
+          toolName: publicWebSearch.tool.name,
+          arguments: webArguments,
+          reason: 'Focused Google and public-page discovery for current employer job openings.',
+        }];
       } else {
-        warnings.push('Public web research is not connected. Configure SERPER_API_KEY on the agent worker to search Google and public company career pages.');
+        warnings.push('The public web connector schema does not support the focused hiring-search arguments.');
       }
+    } else if (hiringResearchQuery) {
+      warnings.push('Public web research is not connected. Configure SERPER_API_KEY on the agent worker to search Google and public company career pages.');
     }
     if (planningError) warnings.push(planningError);
     if (plans.length === 0 && safeTools.length > 0) {
