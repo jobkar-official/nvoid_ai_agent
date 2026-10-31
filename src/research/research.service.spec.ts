@@ -207,6 +207,86 @@ describe('ResearchService', () => {
     ]));
   });
 
+  it('runs focused India job searches and returns structured, evidence-backed hiring records', async () => {
+    const jobUrl = 'https://careers.example.in/jobs/java-backend-engineer';
+    const registry = {
+      getStatuses: () => [{ id: 'serper-research', name: 'Public web research', enabled: true, connected: true }],
+      getToolCatalog: () => [{
+        serverId: 'serper-research',
+        serverName: 'Public web research',
+        tools: [{
+          name: 'search_web',
+          description: 'Search Google and crawl public job pages',
+          annotations: { readOnlyHint: true },
+          inputSchema: {
+            type: 'object',
+            properties: {
+              query: { type: 'string' },
+              queries: { type: 'array', items: { type: 'string' } },
+              limit: { type: 'integer' },
+              country: { type: 'string' },
+              crawlPages: { type: 'boolean' },
+            },
+            required: ['query'],
+          },
+        }],
+      }],
+      callTool: jest.fn().mockResolvedValue({
+        structuredContent: {
+          records: [{
+            id: jobUrl,
+            title: 'Java Backend Engineer',
+            url: jobUrl,
+            pageTitle: 'Java Backend Engineer - Example Technologies',
+            jobPostings: [{
+              title: 'Java Backend Engineer',
+              company: 'Example Technologies',
+              hiringOrganization: { name: 'Example Technologies' },
+              location: 'Bengaluru, Karnataka',
+              experienceRequirements: '3+ years',
+              datePosted: '2026-10-20',
+              employmentType: 'FULL_TIME',
+              url: jobUrl,
+            }],
+            careerPageLinks: ['https://careers.example.in/careers'],
+          }],
+        },
+      }),
+    };
+    const ai = { isEnabled: () => false };
+    const service = new ResearchService(registry as never, ai as never);
+
+    const result = await service.run({
+      query: 'Find 100 Indian IT companies currently hiring Java developers',
+      maxRecords: 100,
+      maxTools: 10,
+    });
+
+    expect(registry.callTool).toHaveBeenCalledWith('serper-research', 'search_web', expect.objectContaining({
+      query: 'Find 100 Indian IT companies currently hiring Java developers',
+      queries: expect.arrayContaining([
+        '"Java developer" India jobs careers',
+        'site:boards.greenhouse.io "Java developer" India',
+      ]),
+      limit: 100,
+      country: 'IN',
+      crawlPages: true,
+    }));
+    expect(result.hiringResearch).toMatchObject({
+      uniqueCompanies: 1,
+      jobs: [{
+        company: 'Example Technologies',
+        position: 'Java Backend Engineer',
+        location: 'Bengaluru, Karnataka',
+        experience: '3+ years',
+        careerPageUrl: 'https://careers.example.in/careers',
+        jobUrl,
+        postedAt: '2026-10-20',
+        employmentType: 'FULL_TIME',
+      }],
+    });
+  });
+
   it('does not collide identical provider IDs from different MCP servers when no URL is present', async () => {
     const registry = {
       getStatuses: () => [],
