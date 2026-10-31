@@ -158,7 +158,7 @@ export class AiAgentService {
           return typeof posting.url === 'string' ? [posting.url] : [];
         }),
         ...(Array.isArray(data.careerPageLinks) ? data.careerPageLinks.filter((value): value is string => typeof value === 'string') : []),
-      ].filter((value): value is string => typeof value === 'string' && /^https?:\\/\\//i.test(value)) )];
+      ].filter((value): value is string => typeof value === 'string' && /^https?:\/\//i.test(value)) )];
       return {
         id: record.id,
         urls,
