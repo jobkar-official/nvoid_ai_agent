@@ -139,6 +139,106 @@ export class AiAgentService {
     }).slice(0, maxCalls);
   }
 
+  async structureHiringResearchResults(
+    query: string,
+    records: Array<{ id: string; url?: string; serverName: string; toolName: string; data: Record<string, unknown> }>,
+    maxResults: number,
+  ): Promise<{ summary: string; jobs: Array<{ evidenceId: string; company: string; position: string; location?: string; experience?: string; careerPageUrl?: string; jobUrl: string; postedAt?: string; employmentType?: string }> } | undefined> {
+    if (!this.isEnabled() || records.length === 0) return undefined;
+    const evidence = records.slice(0, Math.min(80, maxResults * 2)).map((record) => {
+      const data = record.data ?? {};
+      const postingValues = Array.isArray(data.jobPostings) ? data.jobPostings : [];
+      const urls = [...new Set([
+        record.url,
+        typeof data.canonicalUrl === 'string' ? data.canonicalUrl : undefined,
+        typeof data.finalUrl === 'string' ? data.finalUrl : undefined,
+        ...postingValues.flatMap((value) => {
+          if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+          const posting = value as Record<string, unknown>;
+          return typeof posting.url === 'string' ? [posting.url] : [];
+        }),
+      ].filter((value): value is string => typeof value === 'string' && /^https?:\\/\\//i.test(value)) )];
+      return {
+        id: record.id,
+        urls,
+        title: typeof data.title === 'string' ? data.title : undefined,
+        pageTitle: typeof data.pageTitle === 'string' ? data.pageTitle : undefined,
+        snippet: typeof data.snippet === 'string' ? data.snippet.slice(0, 900) : undefined,
+        pageDescription: typeof data.pageDescription === 'string' ? data.pageDescription.slice(0, 900) : undefined,
+        jobPostings: postingValues.slice(0, 8),
+        pageText: typeof data.pageText === 'string' ? data.pageText.slice(0, 2200) : undefined,
+        source: record.serverName + ' / ' + record.toolName,
+      };
+    });
+    const output = await this.chat([
+      {
+        role: 'system',
+        content: [
+          'You convert retrieved public-web evidence into a concise, evidence-grounded hiring report.',
+          'Find currently open job opportunities matching the occupation in the user question and group them as one row per job opening.',
+          'Include only a real hiring company and a specific open position supported by the supplied evidence. Exclude job boards, directories, staffing agencies unless they are themselves the employer, articles, old announcements, and generic company pages.',
+          'Never invent company names, positions, cities, experience requirements, posting dates, career pages, or URLs.',
+          'Use null for any field not explicitly supported by evidence.',
+          'Every job must include evidenceId copied from one supplied evidence id and jobUrl copied exactly from one URL listed in that same evidence item.',
+          'careerPageUrl is optional and must be copied exactly from another supplied evidence URL that clearly belongs to that employer and is a careers/jobs page. Never construct or guess a URL.',
+          'A current opening must be evidenced by an active job detail page, a current jobs feed or an apply/opening indicator. Exclude expired roles when validThrough is in the past.',
+          'Prefer direct employer career/ATS pages over aggregators when both are available. Do not claim 100 companies unless 100 distinct companies are actually supported by evidence.',
+          'Return JSON only: {"summary":"one factual sentence","jobs":[{"evidenceId":"...","company":"...","position":"...","location":"... or null","experience":"... or null","careerPageUrl":"... or null","jobUrl":"exact supplied URL","postedAt":"... or null","employmentType":"... or null"}]}.',
+        ].join(' '),
+      },
+      {
+        role: 'user',
+        content: JSON.stringify({ researchQuestion: query, maximumRows: maxResults, evidence }),
+      },
+    ], 0, true, 15000);
+    const parsed = JSON.parse(output) as { summary?: unknown; jobs?: unknown };
+    if (!Array.isArray(parsed.jobs)) return undefined;
+    const evidenceById = new Map(evidence.map((item) => [item.id, new Set(item.urls)]));
+    const allEvidenceUrls = new Set(evidence.flatMap((item) => item.urls));
+    const normalizeEvidenceUrl = (value: unknown): string | undefined => {
+      if (typeof value !== 'string') return undefined;
+      try {
+        const url = new URL(value);
+        if (!['http:', 'https:'].includes(url.protocol)) return undefined;
+        url.hash = '';
+        return url.href;
+      } catch {
+        return undefined;
+      }
+    };
+    const jobs = parsed.jobs.flatMap((value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+      const item = value as Record<string, unknown>;
+      if (typeof item.evidenceId !== 'string' || typeof item.company !== 'string' || typeof item.position !== 'string') return [];
+      const allowed = evidenceById.get(item.evidenceId);
+      const jobUrl = normalizeEvidenceUrl(item.jobUrl);
+      if (!allowed || !jobUrl || ![...allowed].some((url) => normalizeEvidenceUrl(url) === jobUrl)) return [];
+      const careerPageUrl = normalizeEvidenceUrl(item.careerPageUrl);
+      const safeOptional = (key: string, max = 240): string | undefined => (
+        typeof item[key] === 'string' && (item[key] as string).trim()
+          ? (item[key] as string).trim().slice(0, max)
+          : undefined
+      );
+      return [{
+        evidenceId: item.evidenceId,
+        company: item.company.trim().slice(0, 180),
+        position: item.position.trim().slice(0, 180),
+        location: safeOptional('location'),
+        experience: safeOptional('experience'),
+        ...(careerPageUrl && allEvidenceUrls.has(careerPageUrl) ? { careerPageUrl } : {}),
+        jobUrl,
+        postedAt: safeOptional('postedAt', 80),
+        employmentType: safeOptional('employmentType', 100),
+      }];
+    }).filter((job) => job.company.length > 1 && job.position.length > 1)
+      .filter((job, index, all) => all.findIndex((candidate) => candidate.jobUrl === job.jobUrl) === index)
+      .slice(0, maxResults);
+    return {
+      summary: typeof parsed.summary === 'string' ? parsed.summary.trim().slice(0, 500) : jobs.length + ' evidence-backed open position(s) found.',
+      jobs,
+    };
+  }
+
   async rerankJobs(profile: JobProfile, jobs: NormalizedJob[]): Promise<NormalizedJob[]> {
     if (!this.isEnabled() || jobs.length === 0) return jobs;
 
