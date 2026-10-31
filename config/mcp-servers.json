@@ -679,15 +679,14 @@
           "zip_recruiter",
           "glassdoor",
           "bayt",
-          "naukri"
+          "naukri",
+          "bdjobs",
+          "hellowork"
         ],
         "results_wanted": 25,
         "hours_old": 720,
-        "is_remote": {
-          "$profile": "remote"
-        },
         "country_indeed": "India",
-        "fetch_description": false,
+        "fetch_description": true,
         "description_format": "markdown"
       }
     }
@@ -764,7 +763,12 @@
         "query": {
           "$profile": "jobTitle"
         },
-        "limit": 50
+        "location": {
+          "$profile": "location"
+        },
+        "limit": {
+          "$context": "limit"
+        }
       }
     }
   },
@@ -810,8 +814,11 @@
     "name": "JobDataLake — 1M+ enriched jobs across 40+ ATS platforms",
     "enabled": true,
     "transport": "stdio",
-    "command": "mcp-server",
-    "args": [],
+    "command": "npx",
+    "args": [
+      "-y",
+      "@jobdatalake/mcp-server"
+    ],
     "jobSearch": {
       "tool": "search_jobs",
       "arguments": {
@@ -821,9 +828,12 @@
         "location": {
           "$profile": "location"
         },
+        "skills": {
+          "$profile": "skills"
+        },
         "posted_within": "30d",
         "sort_by": "posted_at:desc",
-        "per_page": 50
+        "limit": 50
       }
     }
   }
