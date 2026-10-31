@@ -57,14 +57,14 @@ jobs:
         run: |
           set -euo pipefail
           docker rm --force nvoid-live-agent >/dev/null 2>&1 || true
-          docker run --detach --name nvoid-live-agent --network host \\
-            --env NODE_ENV=production \\
-            --env PORT="$PORT" \\
-            --env AGENT_API_KEY="$AGENT_API_KEY" \\
-            --env MCP_SERVERS_CONFIG=/app/config/mcp-servers.json \\
-            --env REDIS_HOST=127.0.0.1 \\
-            --env REDIS_PORT=6379 \\
-            --env AUTO_SUBMIT_ENABLED=false \\
+          docker run --detach --name nvoid-live-agent --network host \
+            --env NODE_ENV=production \
+            --env PORT="$PORT" \
+            --env AGENT_API_KEY="$AGENT_API_KEY" \
+            --env MCP_SERVERS_CONFIG=/app/config/mcp-servers.json \
+            --env REDIS_HOST=127.0.0.1 \
+            --env REDIS_PORT=6379 \
+            --env AUTO_SUBMIT_ENABLED=false \
             nvoid-agent:live-check
           cleanup() {
             docker logs nvoid-live-agent 2>&1 || true
