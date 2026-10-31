@@ -314,7 +314,11 @@ export class ResearchService {
           const structured = await this.ai.structureHiringResearchResults(query, records, Math.min(maxRecords, 100));
           if (structured) {
             const uniqueCompanies = new Set(structured.jobs.map((job) => normalizeCompanyName(job.company))).size;
-            hiringResearch = { ...structured, uniqueCompanies };
+            hiringResearch = {
+              ...structured,
+              summary: uniqueCompanies + ' unique company/companies across ' + structured.jobs.length + ' evidence-backed open position(s) found.',
+              uniqueCompanies,
+            };
           }
         } catch (error) {
           this.logger.warn('Hiring research synthesis failed; structured page data will be used: ' + messageOf(error));
