@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/live-source-check.yml
       - config/mcp-servers.json
+      - scripts/search-engine-jobs-mcp-server.cjs
       - scripts/public-job-boards-mcp-server.cjs
       - scripts/remoteok-mcp-server.cjs
       - scripts/live-source-smoke.mjs

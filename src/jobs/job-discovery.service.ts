@@ -31,6 +31,14 @@ export interface SearchResult {
   }>;
   searchReport: SearchSourceReport[];
   backendSync: { synced: boolean; reason?: string };
+  orchestration: {
+    connectedMcpServers: number;
+    connectedSearchTools: number;
+    executedSearchTools: number;
+    queryPlanner: 'llm-assisted' | 'deterministic';
+    llmTitleExpansionUsed: boolean;
+    titleVariants: string[];
+  };
 }
 
 type JobSourceResult = {
@@ -71,6 +79,10 @@ export interface SearchSourceReport {
   rejectedUrlResults?: number;
   rejectedRoleResults?: number;
   rejectedLocationResults?: number;
+  atsBoardsDiscovered?: number;
+  atsBoardsFetched?: number;
+  atsJobsFetched?: number;
+  atsBoardFailures?: number;
   opportunityTypes?: Record<string, number>;
   truncated?: boolean;
 }
@@ -116,6 +128,27 @@ export class JobDiscoveryService {
     const requestedLimit = Math.min(Math.max(1, limit), maximum);
     const effectiveProfile: JobProfile = { ...profile, location: profile.location?.trim() || (profile.countries ?? []).filter((country) => country.trim()).join(', ') || 'Worldwide' };
     const servers = this.mcpRegistry.getJobSearchServers().filter((item) => serverIds === undefined || serverIds.includes(item.server.id));
+    let titleVariants: string[] = [];
+    if (servers.some((entry) => entry.server.id === 'serper-search') && this.aiAgent.isEnabled()) {
+      try {
+        const descriptions = new Map(this.mcpRegistry.getToolCatalog().flatMap((server) => server.tools.map((tool) => [
+          server.serverId + ':' + tool.name,
+          tool.description ?? server.serverName,
+        ] as const)));
+        const proposed = await this.aiAgent.planJobSearchTitleVariants(effectiveProfile, servers.map((entry) => ({
+          serverId: entry.server.id,
+          toolName: entry.tool,
+          description: descriptions.get(entry.server.id + ':' + entry.tool),
+          inputSchema: entry.inputSchema,
+        })));
+        titleVariants = [...new Set(proposed.filter((variant) => (
+          variant.toLowerCase() !== effectiveProfile.jobTitle.toLowerCase()
+          && matchesJobTitle(variant, undefined, effectiveProfile.jobTitle, effectiveProfile.experienceYears)
+        )))].slice(0, 5);
+      } catch (error) {
+        this.logger.warn('LLM job-title expansion failed; deterministic source queries will be used: ' + (error instanceof Error ? error.message : String(error)));
+      }
+    }
     const sourceResults: JobSourceResult[] = await Promise.all(servers.map(async (entry): Promise<JobSourceResult> => {
       try {
         const args = entry.configured
@@ -168,9 +201,12 @@ export class JobDiscoveryService {
                     ...(effectiveProfile.remote === true ? { workplace: 'remote' } : {}),
                   }
                 : toolArgs;
+        const enhancedSourceArgs = entry.server.id === 'serper-search' && titleVariants.length > 0
+          ? { ...sourceArgs, titleVariants }
+          : sourceArgs;
         const result = entry.server.id === 'jobicy'
-          ? await this.callJobicyWithCache(entry.server.id, entry.tool, sourceArgs)
-          : await this.mcpRegistry.callTool(entry.server.id, entry.tool, sourceArgs);
+          ? await this.callJobicyWithCache(entry.server.id, entry.tool, enhancedSourceArgs)
+          : await this.mcpRegistry.callTool(entry.server.id, entry.tool, enhancedSourceArgs);
         const searchId = extractSearchId(result);
         const parsedJobs = entry.server.id === 'jobdatalake' ? parseJobDataLakeSearchResult(result) : parseMcpJobResult(result);
         const rawJobs = parsedJobs.map((raw) => {
@@ -190,6 +226,9 @@ export class JobDiscoveryService {
             const directUrl = job.raw?.directUrl ?? job.raw?.job_url_direct ?? job.raw?.applicationUrl ?? job.raw?.application_url;
             const applicationUrl = resolveRemoteOkApplicationUrl(job.jobUrl, directUrl);
             return { ...job, applicationUrl };
+          }
+          if (entry.server.id === 'serper-search' && typeof job.raw?.applicationUrl === 'string') {
+            return { ...job, applicationUrl: job.raw.applicationUrl };
           }
           if (['jobicy', 'arbeitnow', 'workingnomads', 'himalayas', 'adzuna', 'jooble', 'remotive', 'weworkremotely', 'greenhouse', 'lever', 'ashby', 'serper-search'].includes(entry.server.id)) {
             return { ...job, applicationUrl: undefined };
@@ -322,6 +361,14 @@ export class JobDiscoveryService {
       })),
       searchReport: sourceResults.flatMap((entry) => entry.report ? [entry.report] : []),
       backendSync,
+      orchestration: {
+        connectedMcpServers: this.mcpRegistry.getConnectedServerIds().length,
+        connectedSearchTools: servers.length,
+        executedSearchTools: sourceResults.filter((entry) => entry.connectionStatus === 'searched').length,
+        queryPlanner: titleVariants.length > 0 ? 'llm-assisted' : 'deterministic',
+        llmTitleExpansionUsed: titleVariants.length > 0,
+        titleVariants,
+      },
     };
   }
 

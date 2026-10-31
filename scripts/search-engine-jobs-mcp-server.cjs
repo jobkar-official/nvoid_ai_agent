@@ -136,8 +136,8 @@ function buildSearchQueries(profile) {
   const loc=String(profile.location||(profile.countries||[]).join(' ')||'').trim().slice(0,100);
   const places=locationVariants(loc);
   const place=places.length&&!/^(worldwide|global|anywhere|remote|all countries)$/i.test(places[0])?'('+places.map(quote).join(' OR ')+')':'remote';
-  const roleForms=roleVariants(role);
-  const skills=[...(profile.skills||[]),...(profile.keywords||[])].map(String).map(s=>s.trim()).filter(Boolean).slice(0,5);
+  const roleForms=[...new Set([...roleVariants(role),...(Array.isArray(profile.titleVariants)?profile.titleVariants:[]).map(String).map(value=>value.trim()).filter(Boolean)])].slice(0,8);
+  const skills=[...(profile.skills||[]),...(profile.keywords||[]),...(profile.searchTerms||[])].map(String).map(s=>s.trim()).filter(Boolean).slice(0,8);
   const queries=[];
   const add=(value)=>{const q=String(value||'').replace(/\s+/g,' ').trim();if(q&&!queries.includes(q))queries.push(q);};
   for(const variant of roleForms){
@@ -177,7 +177,7 @@ function buildSearchQueries(profile) {
   add(role+' '+place+' government recruitment vacancy public sector');
   add(role+' '+place+' tender procurement RFP EOI contract opportunity');
   add('('+quote(role)+' OR '+role+') '+place+' internship apprenticeship fellowship recruitment');
-  return queries.slice(0,envInt('SERPER_SEARCH_MAX_QUERIES',36,1,64));
+  return queries.slice(0,envInt('SERPER_SEARCH_MAX_QUERIES',48,1,64));
 }
 function safeUrl(raw) {
   try {
@@ -222,6 +222,13 @@ function parsePage(html,url) {
       if(p.links.length>=150)break;
     }catch{}
   }
+  for(const m of String(html).matchAll(/<iframe\b[^>]*src=["']([^"']+)["'][^>]*>/gi)){
+    try{
+      const linked=safeUrl(new URL(clean(m[1]),url).href);
+      if(linked&&linked.href!==url&&!p.links.some(item=>item.url===linked.href))p.links.push({url:linked.href,text:'Embedded career listings'});
+      if(p.links.length>=180)break;
+    }catch{}
+  }
   return p;
 }
 function companyFrom(url) {
@@ -260,6 +267,80 @@ function candidateFromResult(r,role,location,q) {
   if(!u||!isJobUrl(u.href,[title,desc,...extra].join(' ')))return undefined;
   if(!matchesRole(title,[desc,...extra].join(' '),role))return undefined;
   return{url:u.href,title,description:desc,extra,domain:clean(r.profile?.long_name||r.profile?.name||u.hostname),company:clean(r.profile?.name||''),age:clean(r.page_age||''),query:q,location,role};
+}
+function atsBoardFromUrl(rawUrl) {
+  const url=safeUrl(rawUrl);
+  if(!url)return undefined;
+  const host=url.hostname.toLowerCase();
+  let parts;
+  try{parts=url.pathname.split('/').filter(Boolean).map(part=>decodeURIComponent(part));}
+  catch{return undefined;}
+  let provider;
+  if(host==='boards.greenhouse.io'||host==='job-boards.greenhouse.io')provider='greenhouse';
+  else if(host==='jobs.lever.co'||host==='jobs.eu.lever.co')provider='lever';
+  else if(host==='jobs.ashbyhq.com')provider='ashby';
+  if(!provider||!parts[0]||!/^[a-z0-9][a-z0-9_-]{1,79}$/i.test(parts[0]))return undefined;
+  return {provider,board:parts[0].toLowerCase()};
+}
+function mapAtsJob(board,job) {
+  if(!board||!job||typeof job!=='object')return undefined;
+  let title='',company='',location='',description='',employmentType='',workMode='',postedAt='',jobUrl='',applicationUrl='';
+  const categories=job.categories&&typeof job.categories==='object'?job.categories:{};
+  if(board.provider==='greenhouse'){
+    title=clean(job.title);
+    company=clean(job.company_name||job.company||board.board.replace(/[-_]/g,' '));
+    location=clean(job.location?.name||job.location||'');
+    description=clean(job.content||job.description||'');
+    employmentType=clean(Array.isArray(job.metadata)?job.metadata.find(item=>/employment type/i.test(String(item?.name||'')))?.value:'');
+    postedAt=clean(job.updated_at||job.created_at||'');
+    jobUrl=clean(job.absolute_url||job.url||'');
+    applicationUrl=jobUrl;
+  }else if(board.provider==='lever'){
+    title=clean(job.text||job.title);
+    company=clean(job.company||job.companyName||board.board.replace(/[-_]/g,' '));
+    location=clean(categories.location||job.location||'');
+    description=clean(job.descriptionPlain||job.description||job.additional||'');
+    employmentType=clean(categories.commitment||'');
+    workMode=clean(job.workplaceType||'');
+    postedAt=clean(job.createdAt||'');
+    jobUrl=clean(job.hostedUrl||job.url||'');
+    applicationUrl=clean(job.applyUrl||job.hostedUrl||job.url||'');
+  }else if(board.provider==='ashby'){
+    title=clean(job.title);
+    company=clean(job.companyName||job.company||board.board.replace(/[-_]/g,' '));
+    location=clean(typeof job.location==='string'?job.location:job.location?.name||job.locationName||job.address?.addressLocality||'');
+    description=clean(job.descriptionPlain||job.descriptionHtml||job.description||'');
+    employmentType=clean(job.employmentType||'');
+    workMode=job.isRemote===true?'Remote':clean(job.workplaceType||'');
+    postedAt=clean(job.publishedAt||job.updatedAt||'');
+    jobUrl=clean(job.jobUrl||job.url||'');
+    applicationUrl=clean(job.applyUrl||job.jobUrl||job.url||'');
+  }
+  const safeJobUrl=safeUrl(jobUrl),safeApplicationUrl=safeUrl(applicationUrl);
+  if(!title||!safeJobUrl)return undefined;
+  const id=clean(job.id||job.requisition_id||safeJobUrl.href);
+  return {
+    id,title,company,location,country:country(location)||'',description,
+    tags:clean([job.department,job.team,categories.team].filter(Boolean).join(' ')),
+    employmentType,workMode,postedAt,url:safeJobUrl.href,
+    applicationUrl:safeApplicationUrl?.href||safeJobUrl.href,source:SOURCE,
+    raw:{atsProvider:board.provider,atsBoard:board.board,atsJobId:id,applicationUrl:safeApplicationUrl?.href||safeJobUrl.href,sourceDomain:safeJobUrl.hostname,opportunityType:'employment'}
+  };
+}
+async function fetchAtsBoard(board) {
+  const endpoint=board.provider==='greenhouse'
+    ? 'https://boards-api.greenhouse.io/v1/boards/'+encodeURIComponent(board.board)+'/jobs?content=true'
+    : board.provider==='lever'
+      ? 'https://api.lever.co/v0/postings/'+encodeURIComponent(board.board)+'?mode=json'
+      : 'https://api.ashbyhq.com/posting-api/job-board/'+encodeURIComponent(board.board)+'?includeCompensation=true&listedOnly=true';
+  const response=await fetch(endpoint,{headers:{accept:'application/json','user-agent':'NvoidJobAgent/1.0 (+https://jobkar.in)'},signal:AbortSignal.timeout(10000)});
+  if(!response.ok)throw new Error(board.provider+' board '+board.board+' returned HTTP '+response.status);
+  const length=Number(response.headers.get('content-length')||0);
+  if(length>5242880)throw new Error('ATS board response exceeded the 5 MB limit');
+  const payload=await response.json();
+  const values=board.provider==='lever'?payload:Array.isArray(payload?.jobs)?payload.jobs:[];
+  if(!Array.isArray(values))throw new Error('ATS board returned an unexpected response');
+  return values.filter(job=>board.provider!=='ashby'||job?.isListed!==false).map(job=>mapAtsJob(board,job)).filter(Boolean);
 }
 function normalizeSearchResponse(data) {
   const results = Array.isArray(data?.organic) ? data.organic.map((item) => {
@@ -312,7 +393,7 @@ async function discover(args,limit) {
   const role=String(args.query||'').trim(),location=String(args.location||(args.countries||[]).join(', ')||'').trim();
   if(!role||!location)throw new Error('Both target job title and preferred location are required.');
   if(!process.env.SERPER_API_KEY||String(process.env.SERPER_API_KEY).includes('$'+'{'))throw new Error('Serper search is disabled. Set SERPER_API_KEY and restart the worker.');
-  const target=Math.min(envInt('SERPER_SEARCH_MAX_RESULTS',1000,50,1000),limit),queries=buildSearchQueries({query:role,location,skills:args.skills,keywords:args.keywords,remote:args.remote===true}),pageCap=envInt('SERPER_SEARCH_MAX_PAGES_PER_QUERY',4,1,10),requestCap=envInt('SERPER_SEARCH_MAX_REQUESTS',72,1,120);
+  const target=Math.min(envInt('SERPER_SEARCH_MAX_RESULTS',1000,50,1000),limit),queries=buildSearchQueries({query:role,location,skills:args.skills,keywords:args.keywords,searchTerms:args.searchTerms,titleVariants:args.titleVariants,remote:args.remote===true}),pageCap=envInt('SERPER_SEARCH_MAX_PAGES_PER_QUERY',4,1,10),requestCap=envInt('SERPER_SEARCH_MAX_REQUESTS',96,1,120);
   const candidateMap=new Map();let calls=0,indexed=0,failures=0,more=false,rejectedUrl=0,rejectedRole=0,rejectedLocation=0;
   for(let offset=0;offset<pageCap&&calls<requestCap;offset++){
     const tasks=queries.slice(0,Math.min(queries.length,requestCap-calls)).map(q=>({q,offset}));
@@ -330,7 +411,7 @@ async function discover(args,limit) {
     }
     if(candidateMap.size>=target*1.2)break;
   }
-  const candidates=[...candidateMap.values()],pageBudget=envInt('SERPER_SEARCH_MAX_PAGE_FETCHES',250,0,500);
+  const candidates=[...candidateMap.values()],pageBudget=envInt('SERPER_SEARCH_MAX_PAGE_FETCHES',350,0,500);
   const primaryFetchLimit=Math.min(candidates.length,pageBudget>0?Math.max(1,Math.floor(pageBudget*0.6)):0);
   const crawled=await concurrent(candidates.slice(0,primaryFetchLimit),envInt('SERPER_SEARCH_PAGE_CRAWL_CONCURRENCY',20,1,20),async candidate=>({candidate,page:await crawl(candidate.url)}));
   const linkedCandidates=new Map();
@@ -348,6 +429,16 @@ async function discover(args,limit) {
     }
   }
   const linkCandidates=[...linkedCandidates.values()],secondarySlots=Math.max(0,pageBudget-crawled.length);
+  const atsBoardMap=new Map();
+  for(const candidate of [...candidates,...linkCandidates]){
+    const board=atsBoardFromUrl(candidate.url);
+    if(board)atsBoardMap.set(board.provider+':'+board.board,board);
+  }
+  const atsBoards=[...atsBoardMap.values()].slice(0,envInt('SERPER_SEARCH_MAX_ATS_BOARDS',20,1,80));
+  const atsBoardResults=await concurrent(atsBoards,envInt('SERPER_SEARCH_ATS_BOARD_CONCURRENCY',8,1,12),async board=>{
+    try{return{board,jobs:await fetchAtsBoard(board)};}
+    catch(error){return{board,jobs:[],error:error instanceof Error?error.message:String(error)};}
+  });
   const linkedFetchLimit=Math.min(linkCandidates.length,Math.floor(secondarySlots*0.4));
   const extraIndexedCandidates=candidates.slice(primaryFetchLimit,primaryFetchLimit+secondarySlots-linkedFetchLimit);
   const secondaryPlan=[...linkCandidates.slice(0,linkedFetchLimit),...extraIndexedCandidates];
@@ -384,6 +475,21 @@ async function discover(args,limit) {
       metadata++;
     }else if(job)rejectedRole++;
   }
+  let atsJobsFetched=0;
+  let atsBoardFailures=0;
+  let atsBoardsFetched=0;
+  for(const result of atsBoardResults){
+    if(!result)continue;
+    if(result.error){atsBoardFailures++;continue;}
+    atsBoardsFetched++;
+    atsJobsFetched+=result.jobs.length;
+    for(const job of result.jobs){
+      if(!matchesRole(job.title,job.description,role)){rejectedRole++;continue;}
+      if(!locationMatch(job.location,job.description,job.url,location)){rejectedLocation++;continue;}
+      const key=job.url.toLowerCase().replace(/\/$/,'');
+      if(!unique.has(key))unique.set(key,job);
+    }
+  }
   const records=[...unique.values()],jobs=records.slice(0,target),kinds=records.reduce((counts,job)=>{
     const kind=job.raw?.opportunityType||'employment';counts[kind]=(counts[kind]||0)+1;return counts;
   },{});
@@ -399,8 +505,9 @@ async function discover(args,limit) {
     reachedRequestedLimit:jobs.length>=target,moreSearchResultsAvailable:more,
     failedSearchRequests:failures,rejectedUrlResults:rejectedUrl,
     rejectedRoleResults:rejectedRole,rejectedLocationResults:rejectedLocation,
+    atsBoardsDiscovered:atsBoards.length,atsBoardsFetched,atsJobsFetched,atsBoardFailures,
     opportunityTypes:kinds,
-    truncated:records.length>jobs.length||candidates.length>=target*1.2||linkCandidates.length>linkedFetchLimit
+    truncated:records.length>jobs.length||candidates.length>=target*1.2||linkCandidates.length>linkedFetchLimit||atsBoardMap.size>atsBoards.length
   }};
 }
 async function search(args) {
@@ -427,4 +534,4 @@ async function handle(m){
 }
 function start(){const rl=readline.createInterface({input:process.stdin,crlfDelay:Infinity});rl.on('line',line=>{if(!line.trim())return;try{void handle(JSON.parse(line)).catch(e=>process.stderr.write(String(e)+'\n'));}catch{process.stderr.write('Ignored invalid MCP JSON.\n');}});}
 if(require.main===module)start();
-module.exports={buildSearchQueries,family,matchesRole,locationMatch,safeUrl,isJobUrl,parsePage,normalizeSearchResponse};
+module.exports={buildSearchQueries,family,matchesRole,locationMatch,safeUrl,isJobUrl,parsePage,normalizeSearchResponse,atsBoardFromUrl,mapAtsJob};
