@@ -6,7 +6,38 @@ import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 
 const root = process.cwd();
 const configPath = path.join(root, 'config', 'mcp-servers.json');
-const configs = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+const rawConfigs = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+function hasCredentials(...names) {
+  return names.every(name => {
+    const value = process.env[name];
+    return Boolean(value && value.trim() && !value.includes('${'));
+  });
+}
+
+function autoEnabledByCredentials(server) {
+  const id = server.id;
+  return (
+    (id === 'serper-search' || id === 'serper-research') && hasCredentials('SERPER_API_KEY')
+    || id === 'naukri' && hasCredentials('NAUKRI_MCP_URL', 'NAUKRI_MCP_TOKEN')
+    || id === 'indeed' && hasCredentials('INDEED_MCP_URL', 'INDEED_MCP_TOKEN')
+    || id === 'linkedin' && hasCredentials('LINKEDIN_MCP_URL', 'LINKEDIN_MCP_TOKEN')
+    || id === 'glassdoor' && hasCredentials('GLASSDOOR_MCP_URL', 'GLASSDOOR_MCP_TOKEN')
+    || id === 'apna' && hasCredentials('APNA_MCP_URL', 'APNA_MCP_TOKEN')
+    || id === 'greenhouse' && hasCredentials('GREENHOUSE_BOARDS')
+    || id === 'lever' && hasCredentials('LEVER_SITES')
+    || id === 'ashby' && hasCredentials('ASHBY_BOARDS')
+    || (id === 'apify-boards' || id === 'apify-apna') && hasCredentials('APIFY_API_TOKEN')
+    || id === 'adzuna' && hasCredentials('ADZUNA_APP_ID', 'ADZUNA_APP_KEY')
+    || id === 'jooble' && hasCredentials('JOOBLE_API_KEY')
+  );
+}
+
+const configs = rawConfigs.map(server => ({
+  ...server,
+  enabled: server.enabled === true || autoEnabledByCredentials(server),
+}));
+const credentialDisabledConfigs = rawConfigs.filter(server => server.enabled !== true && !autoEnabledByCredentials(server));
 const query = process.argv[2] || 'Software Developer';
 const location = process.argv[3] || 'Bengaluru';
 const limit = Math.max(1, Math.min(50, Number(process.env.NVOID_MCP_SMOKE_LIMIT || 20)));
@@ -176,6 +207,14 @@ async function connect(server) {
 }
 
 const summary = [];
+for (const server of credentialDisabledConfigs) {
+  process.stdout.write(JSON.stringify({
+    server: server.id,
+    enabled: false,
+    skipped: true,
+    reason: 'Disabled in MCP config; required credentials are not configured.',
+  }) + '\\n');
+}
 for (const server of configs.filter(item => item.enabled)) {
   const row = { server: server.id, connected: false, tools: 0, searched: 0, jobs: 0, details: 0, errors: [] };
   let client;
