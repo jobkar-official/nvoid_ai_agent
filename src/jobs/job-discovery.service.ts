@@ -253,10 +253,11 @@ export class JobDiscoveryService {
     for (const job of initiallyRanked) {
       const serverId = sourceForJobId.get(job.id);
       if (!serverId) continue;
-      const sourceTargets = detailTargetsBySource.get(serverId) ?? [];
+      const sourceKey = serverId + ':' + job.source;
+      const sourceTargets = detailTargetsBySource.get(sourceKey) ?? [];
       if (sourceTargets.length < 3) {
         sourceTargets.push(job);
-        detailTargetsBySource.set(serverId, sourceTargets);
+        detailTargetsBySource.set(sourceKey, sourceTargets);
       }
     }
     const detailTargets = [...detailTargetsBySource.values()].flat().slice(0, 24);
@@ -267,8 +268,9 @@ export class JobDiscoveryService {
     )));
     const detailById = new Map(detailResults.map((result) => [result.job.id, result.job]));
     for (const sourceResult of sourceResults) {
-      const requested = detailTargetsBySource.get(sourceResult.serverId) ?? [];
-      const providerDetails = detailResults.filter((result) => result.serverId === sourceResult.serverId);
+      const providerId = resolveSourceId(sourceResult.serverId, {}, sourceResult.tool);
+      const requested = detailTargetsBySource.get(sourceResult.serverId + ':' + providerId) ?? [];
+      const providerDetails = detailResults.filter((result) => result.serverId === sourceResult.serverId && result.job.source === providerId);
       sourceResult.detailsRequested = requested.length;
       sourceResult.detailsFetched = providerDetails.filter((result) => result.fetched).length;
       sourceResult.detailTool = providerDetails.find((result) => result.tool)?.tool;
